@@ -8,6 +8,7 @@ import {
   DEFAULT_IDENTITY_FILENAME,
   DEFAULT_MEMORY_ALT_FILENAME,
   DEFAULT_MEMORY_FILENAME,
+  DEFAULT_SOUL_FILENAME,
   DEFAULT_TOOLS_FILENAME,
   DEFAULT_USER_FILENAME,
   ensureAgentWorkspace,
@@ -139,5 +140,44 @@ describe("loadWorkspaceBootstrapFiles", () => {
 
     const files = await loadWorkspaceBootstrapFiles(tempDir);
     expect(getMemoryEntries(files)).toHaveLength(0);
+  });
+
+  it("reads bootstrap files from memorySubdir when provided", async () => {
+    const tempDir = await makeTempWorkspace("openclaw-workspace-");
+    const memorySubdir = "GenieBrain";
+    const memoryDir = path.join(tempDir, memorySubdir);
+    await fs.mkdir(memoryDir, { recursive: true });
+    await writeWorkspaceFile({ dir: tempDir, name: DEFAULT_SOUL_FILENAME, content: "root-soul" });
+    await writeWorkspaceFile({
+      dir: memoryDir,
+      name: DEFAULT_SOUL_FILENAME,
+      content: "subdir-soul",
+    });
+
+    const files = await loadWorkspaceBootstrapFiles(tempDir, memorySubdir);
+    const soulEntry = files.find((file) => file.name === DEFAULT_SOUL_FILENAME);
+
+    expect(soulEntry?.missing).toBe(false);
+    expect(soulEntry?.content).toBe("subdir-soul");
+    expect(soulEntry?.path).toBe(path.join(memoryDir, DEFAULT_SOUL_FILENAME));
+  });
+});
+
+describe("ensureAgentWorkspace with memorySubdir", () => {
+  it("creates memorySubdir and writes bootstrap templates there", async () => {
+    const tempDir = await makeTempWorkspace("openclaw-workspace-");
+    const memorySubdir = "GenieBrain";
+    const ws = await ensureAgentWorkspace({
+      dir: tempDir,
+      ensureBootstrapFiles: true,
+      memorySubdir,
+    });
+    const memoryDir = path.join(tempDir, memorySubdir);
+
+    expect(ws.dir).toBe(tempDir);
+    expect(ws.soulPath).toBe(path.join(memoryDir, DEFAULT_SOUL_FILENAME));
+    await expect(fs.access(memoryDir)).resolves.toBeUndefined();
+    await expect(fs.access(path.join(memoryDir, DEFAULT_SOUL_FILENAME))).resolves.toBeUndefined();
+    await expect(fs.access(path.join(tempDir, DEFAULT_SOUL_FILENAME))).rejects.toThrow();
   });
 });

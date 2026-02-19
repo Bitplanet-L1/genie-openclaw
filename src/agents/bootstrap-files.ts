@@ -50,7 +50,10 @@ export async function resolveBootstrapFilesForRun(params: {
 }): Promise<WorkspaceBootstrapFile[]> {
   const sessionKey = params.sessionKey ?? params.sessionId;
   const bootstrapFiles = filterBootstrapFilesForSession(
-    await loadWorkspaceBootstrapFiles(params.workspaceDir),
+    await loadWorkspaceBootstrapFiles(
+      params.workspaceDir,
+      params.config?.agents?.defaults?.memorySubdir,
+    ),
     sessionKey,
   );
 
