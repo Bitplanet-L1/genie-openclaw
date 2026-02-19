@@ -32,7 +32,7 @@ jobs:
         id: version-check
         run: |
           LOCAL_VERSION=$(node -p "require('./package.json').version")
-          REMOTE_VERSION=$(npm view @deva-me-ai/genie-openclaw version --registry https://npm.pkg.github.com 2>/dev/null || echo "0.0.0")
+          REMOTE_VERSION=$(npm view @bitplanet-l1/genie-openclaw version --registry https://npm.pkg.github.com 2>/dev/null || echo "0.0.0")
           echo "local=$LOCAL_VERSION" >> $GITHUB_OUTPUT
           echo "remote=$REMOTE_VERSION" >> $GITHUB_OUTPUT
           if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ]; then
