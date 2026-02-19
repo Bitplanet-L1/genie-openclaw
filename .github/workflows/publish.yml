@@ -1,0 +1,50 @@
+name: Publish to GitHub Packages
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://npm.pkg.github.com"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Check if version already published
+        id: version-check
+        run: |
+          LOCAL_VERSION=$(node -p "require('./package.json').version")
+          REMOTE_VERSION=$(npm view @deva-me-ai/genie-openclaw version --registry https://npm.pkg.github.com 2>/dev/null || echo "0.0.0")
+          echo "local=$LOCAL_VERSION" >> $GITHUB_OUTPUT
+          echo "remote=$REMOTE_VERSION" >> $GITHUB_OUTPUT
+          if [ "$LOCAL_VERSION" = "$REMOTE_VERSION" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish
+        if: steps.version-check.outputs.skip == 'false'
+        run: npm publish --access restricted
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
