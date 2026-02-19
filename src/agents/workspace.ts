@@ -255,9 +255,18 @@ async function ensureGitRepo(dir: string, isBrandNewWorkspace: boolean) {
   }
 }
 
+function resolveMemoryWorkspaceDir(workspaceDir: string, memorySubdir?: string): string {
+  const subdir = memorySubdir?.trim();
+  if (!subdir) {
+    return workspaceDir;
+  }
+  return path.join(workspaceDir, subdir);
+}
+
 export async function ensureAgentWorkspace(params?: {
   dir?: string;
   ensureBootstrapFiles?: boolean;
+  memorySubdir?: string;
 }): Promise<{
   dir: string;
   agentsPath?: string;
@@ -270,19 +279,21 @@ export async function ensureAgentWorkspace(params?: {
 }> {
   const rawDir = params?.dir?.trim() ? params.dir.trim() : DEFAULT_AGENT_WORKSPACE_DIR;
   const dir = resolveUserPath(rawDir);
+  const memoryDir = resolveMemoryWorkspaceDir(dir, params?.memorySubdir);
   await fs.mkdir(dir, { recursive: true });
+  await fs.mkdir(memoryDir, { recursive: true });
 
   if (!params?.ensureBootstrapFiles) {
     return { dir };
   }
 
-  const agentsPath = path.join(dir, DEFAULT_AGENTS_FILENAME);
-  const soulPath = path.join(dir, DEFAULT_SOUL_FILENAME);
-  const toolsPath = path.join(dir, DEFAULT_TOOLS_FILENAME);
-  const identityPath = path.join(dir, DEFAULT_IDENTITY_FILENAME);
-  const userPath = path.join(dir, DEFAULT_USER_FILENAME);
-  const heartbeatPath = path.join(dir, DEFAULT_HEARTBEAT_FILENAME);
-  const bootstrapPath = path.join(dir, DEFAULT_BOOTSTRAP_FILENAME);
+  const agentsPath = path.join(memoryDir, DEFAULT_AGENTS_FILENAME);
+  const soulPath = path.join(memoryDir, DEFAULT_SOUL_FILENAME);
+  const toolsPath = path.join(memoryDir, DEFAULT_TOOLS_FILENAME);
+  const identityPath = path.join(memoryDir, DEFAULT_IDENTITY_FILENAME);
+  const userPath = path.join(memoryDir, DEFAULT_USER_FILENAME);
+  const heartbeatPath = path.join(memoryDir, DEFAULT_HEARTBEAT_FILENAME);
+  const bootstrapPath = path.join(memoryDir, DEFAULT_BOOTSTRAP_FILENAME);
   const statePath = resolveWorkspaceStatePath(dir);
 
   const isBrandNewWorkspace = await (async () => {
@@ -409,44 +420,53 @@ async function resolveMemoryBootstrapEntries(
   return deduped;
 }
 
-export async function loadWorkspaceBootstrapFiles(dir: string): Promise<WorkspaceBootstrapFile[]> {
+export async function loadWorkspaceBootstrapFiles(
+  dir: string,
+  memorySubdir?: string,
+): Promise<WorkspaceBootstrapFile[]> {
   const resolvedDir = resolveUserPath(dir);
+  const memoryDir = resolveMemoryWorkspaceDir(resolvedDir, memorySubdir);
+  return loadWorkspaceBootstrapFilesFromDir(memoryDir);
+}
 
+async function loadWorkspaceBootstrapFilesFromDir(
+  memoryDir: string,
+): Promise<WorkspaceBootstrapFile[]> {
   const entries: Array<{
     name: WorkspaceBootstrapFileName;
     filePath: string;
   }> = [
     {
       name: DEFAULT_AGENTS_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_AGENTS_FILENAME),
+      filePath: path.join(memoryDir, DEFAULT_AGENTS_FILENAME),
     },
     {
       name: DEFAULT_SOUL_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_SOUL_FILENAME),
+      filePath: path.join(memoryDir, DEFAULT_SOUL_FILENAME),
     },
     {
       name: DEFAULT_TOOLS_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_TOOLS_FILENAME),
+      filePath: path.join(memoryDir, DEFAULT_TOOLS_FILENAME),
     },
     {
       name: DEFAULT_IDENTITY_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_IDENTITY_FILENAME),
+      filePath: path.join(memoryDir, DEFAULT_IDENTITY_FILENAME),
     },
     {
       name: DEFAULT_USER_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_USER_FILENAME),
+      filePath: path.join(memoryDir, DEFAULT_USER_FILENAME),
     },
     {
       name: DEFAULT_HEARTBEAT_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_HEARTBEAT_FILENAME),
+      filePath: path.join(memoryDir, DEFAULT_HEARTBEAT_FILENAME),
     },
     {
       name: DEFAULT_BOOTSTRAP_FILENAME,
-      filePath: path.join(resolvedDir, DEFAULT_BOOTSTRAP_FILENAME),
+      filePath: path.join(memoryDir, DEFAULT_BOOTSTRAP_FILENAME),
     },
   ];
 
-  entries.push(...(await resolveMemoryBootstrapEntries(resolvedDir)));
+  entries.push(...(await resolveMemoryBootstrapEntries(memoryDir)));
 
   const result: WorkspaceBootstrapFile[] = [];
   for (const entry of entries) {
