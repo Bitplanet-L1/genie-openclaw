@@ -10,16 +10,19 @@ import {
   DEFAULT_TOOLS_FILENAME,
   DEFAULT_USER_FILENAME,
   ensureAgentWorkspace,
+  resolveMemoryWorkspaceDir,
 } from "../workspace.js";
 
 export async function ensureSandboxWorkspace(
   workspaceDir: string,
   seedFrom?: string,
   skipBootstrap?: boolean,
+  memoryDir?: string,
 ) {
-  await fs.mkdir(workspaceDir, { recursive: true });
+  const resolvedMemoryDir = resolveMemoryWorkspaceDir(workspaceDir, memoryDir);
+  await fs.mkdir(resolvedMemoryDir, { recursive: true });
   if (seedFrom) {
-    const seed = resolveUserPath(seedFrom);
+    const seedMemoryDir = resolveMemoryWorkspaceDir(resolveUserPath(seedFrom), memoryDir);
     const files = [
       DEFAULT_AGENTS_FILENAME,
       DEFAULT_SOUL_FILENAME,
@@ -30,8 +33,8 @@ export async function ensureSandboxWorkspace(
       DEFAULT_HEARTBEAT_FILENAME,
     ];
     for (const name of files) {
-      const src = path.join(seed, name);
-      const dest = path.join(workspaceDir, name);
+      const src = path.join(seedMemoryDir, name);
+      const dest = path.join(resolvedMemoryDir, name);
       try {
         await fs.access(dest);
       } catch {
@@ -47,5 +50,6 @@ export async function ensureSandboxWorkspace(
   await ensureAgentWorkspace({
     dir: workspaceDir,
     ensureBootstrapFiles: !skipBootstrap,
+    memoryDir,
   });
 }

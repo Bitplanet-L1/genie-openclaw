@@ -343,7 +343,7 @@ export async function runConfigureWizard(
         },
       };
       await ensureWorkspaceAndSessions(workspaceDir, runtime, {
-        memorySubdir: nextConfig.agents?.defaults?.memorySubdir,
+        memoryDir: nextConfig.agents?.defaults?.memoryDir,
       });
     };
 

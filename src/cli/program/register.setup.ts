@@ -20,6 +20,10 @@ export function registerSetupCommand(program: Command) {
       "--workspace <dir>",
       "Agent workspace directory (default: ~/.openclaw/workspace; stored as agents.defaults.workspace)",
     )
+    .option(
+      "--memory-dir <path>",
+      "Memory directory for agent files (relative to workspace, or absolute; stored as agents.defaults.memoryDir)",
+    )
     .option("--wizard", "Run the interactive onboarding wizard", false)
     .option("--non-interactive", "Run the wizard without prompts", false)
     .option("--mode <mode>", "Wizard mode: local|remote")
@@ -47,7 +51,13 @@ export function registerSetupCommand(program: Command) {
           );
           return;
         }
-        await setupCommand({ workspace: opts.workspace as string | undefined }, defaultRuntime);
+        await setupCommand(
+          {
+            workspace: opts.workspace as string | undefined,
+            memoryDir: opts.memoryDir as string | undefined,
+          },
+          defaultRuntime,
+        );
       });
     });
 }

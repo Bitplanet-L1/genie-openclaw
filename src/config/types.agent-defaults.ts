@@ -126,8 +126,8 @@ export type AgentDefaultsConfig = {
   models?: Record<string, AgentModelEntryConfig>;
   /** Agent working directory (preferred). Used as the default cwd for agent runs. */
   workspace?: string;
-  /** Optional subdirectory under workspace for memory/bootstrap markdown files. */
-  memorySubdir?: string;
+  /** Optional directory for memory/bootstrap markdown files (relative to workspace, or absolute). */
+  memoryDir?: string;
   /** Optional repository root for system prompt runtime line (overrides auto-detect). */
   repoRoot?: string;
   /** Skip bootstrap (BOOTSTRAP.md creation, etc.) for pre-configured deployments. */

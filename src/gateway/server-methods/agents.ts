@@ -17,6 +17,7 @@ import {
   DEFAULT_USER_FILENAME,
   ensureAgentWorkspace,
   isWorkspaceOnboardingCompleted,
+  resolveMemoryWorkspaceDir,
 } from "../../agents/workspace.js";
 import { movePathToTrash } from "../../browser/trash.js";
 import {
@@ -68,6 +69,7 @@ function resolveAgentWorkspaceFileOrRespondError(
   cfg: ReturnType<typeof loadConfig>;
   agentId: string;
   workspaceDir: string;
+  memoryDir: string;
   name: string;
 } | null {
   const cfg = loadConfig();
@@ -89,7 +91,9 @@ function resolveAgentWorkspaceFileOrRespondError(
     return null;
   }
   const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
-  return { cfg, agentId, workspaceDir, name };
+  const memDir = cfg.agents?.defaults?.memoryDir;
+  const memoryDir = resolveMemoryWorkspaceDir(workspaceDir, memDir);
+  return { cfg, agentId, workspaceDir, memoryDir, name };
 }
 
 type FileMeta = {
@@ -112,7 +116,10 @@ async function statFile(filePath: string): Promise<FileMeta | null> {
   }
 }
 
-async function listAgentFiles(workspaceDir: string, options?: { hideBootstrap?: boolean }) {
+async function listAgentFiles(
+  workspaceDir: string,
+  options?: { hideBootstrap?: boolean; memoryDir?: string },
+) {
   const files: Array<{
     name: string;
     path: string;
@@ -121,11 +128,12 @@ async function listAgentFiles(workspaceDir: string, options?: { hideBootstrap?: 
     updatedAtMs?: number;
   }> = [];
 
+  const memoryDir = resolveMemoryWorkspaceDir(workspaceDir, options?.memoryDir);
   const bootstrapFileNames = options?.hideBootstrap
     ? BOOTSTRAP_FILE_NAMES_POST_ONBOARDING
     : BOOTSTRAP_FILE_NAMES;
   for (const name of bootstrapFileNames) {
-    const filePath = path.join(workspaceDir, name);
+    const filePath = path.join(memoryDir, name);
     const meta = await statFile(filePath);
     if (meta) {
       files.push({
@@ -140,7 +148,7 @@ async function listAgentFiles(workspaceDir: string, options?: { hideBootstrap?: 
     }
   }
 
-  const primaryMemoryPath = path.join(workspaceDir, DEFAULT_MEMORY_FILENAME);
+  const primaryMemoryPath = path.join(memoryDir, DEFAULT_MEMORY_FILENAME);
   const primaryMeta = await statFile(primaryMemoryPath);
   if (primaryMeta) {
     files.push({
@@ -151,7 +159,7 @@ async function listAgentFiles(workspaceDir: string, options?: { hideBootstrap?: 
       updatedAtMs: primaryMeta.updatedAtMs,
     });
   } else {
-    const altMemoryPath = path.join(workspaceDir, DEFAULT_MEMORY_ALT_FILENAME);
+    const altMemoryPath = path.join(memoryDir, DEFAULT_MEMORY_ALT_FILENAME);
     const altMeta = await statFile(altMemoryPath);
     if (altMeta) {
       files.push({
@@ -271,7 +279,12 @@ export const agentsHandlers: GatewayRequestHandlers = {
     // Ensure workspace & transcripts exist BEFORE writing config so a failure
     // here does not leave a broken config entry behind.
     const skipBootstrap = Boolean(nextConfig.agents?.defaults?.skipBootstrap);
-    await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: !skipBootstrap });
+    const memoryDir = nextConfig.agents?.defaults?.memoryDir;
+    await ensureAgentWorkspace({
+      dir: workspaceDir,
+      ensureBootstrapFiles: !skipBootstrap,
+      memoryDir,
+    });
     await fs.mkdir(resolveSessionTranscriptsDirForAgent(agentId), { recursive: true });
 
     await writeConfigFile(nextConfig);
@@ -280,7 +293,10 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const safeName = sanitizeIdentityLine(rawName);
     const emoji = resolveOptionalStringParam(params.emoji);
     const avatar = resolveOptionalStringParam(params.avatar);
-    const identityPath = path.join(workspaceDir, DEFAULT_IDENTITY_FILENAME);
+    const identityPath = path.join(
+      resolveMemoryWorkspaceDir(workspaceDir, memoryDir),
+      DEFAULT_IDENTITY_FILENAME,
+    );
     const lines = [
       "",
       `- Name: ${safeName}`,
@@ -337,15 +353,23 @@ export const agentsHandlers: GatewayRequestHandlers = {
 
     await writeConfigFile(nextConfig);
 
+    const memoryDir = nextConfig.agents?.defaults?.memoryDir;
     if (workspaceDir) {
       const skipBootstrap = Boolean(nextConfig.agents?.defaults?.skipBootstrap);
-      await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: !skipBootstrap });
+      await ensureAgentWorkspace({
+        dir: workspaceDir,
+        ensureBootstrapFiles: !skipBootstrap,
+        memoryDir,
+      });
     }
 
     if (avatar) {
       const workspace = workspaceDir ?? resolveAgentWorkspaceDir(nextConfig, agentId);
-      await fs.mkdir(workspace, { recursive: true });
-      const identityPath = path.join(workspace, DEFAULT_IDENTITY_FILENAME);
+      await fs.mkdir(resolveMemoryWorkspaceDir(workspace, memoryDir), { recursive: true });
+      const identityPath = path.join(
+        resolveMemoryWorkspaceDir(workspace, memoryDir),
+        DEFAULT_IDENTITY_FILENAME,
+      );
       await fs.appendFile(identityPath, `\n- Avatar: ${sanitizeIdentityLine(avatar)}\n`, "utf-8");
     }
 
@@ -430,7 +454,8 @@ export const agentsHandlers: GatewayRequestHandlers = {
     } catch {
       // Fall back to showing BOOTSTRAP if workspace state cannot be read.
     }
-    const files = await listAgentFiles(workspaceDir, { hideBootstrap });
+    const memoryDir = cfg.agents?.defaults?.memoryDir;
+    const files = await listAgentFiles(workspaceDir, { hideBootstrap, memoryDir });
     respond(true, { agentId, workspace: workspaceDir, files }, undefined);
   },
   "agents.files.get": async ({ params, respond }) => {
@@ -451,8 +476,8 @@ export const agentsHandlers: GatewayRequestHandlers = {
     if (!resolved) {
       return;
     }
-    const { agentId, workspaceDir, name } = resolved;
-    const filePath = path.join(workspaceDir, name);
+    const { agentId, workspaceDir, memoryDir, name } = resolved;
+    const filePath = path.join(memoryDir, name);
     const meta = await statFile(filePath);
     if (!meta) {
       respond(
@@ -502,9 +527,9 @@ export const agentsHandlers: GatewayRequestHandlers = {
     if (!resolved) {
       return;
     }
-    const { agentId, workspaceDir, name } = resolved;
-    await fs.mkdir(workspaceDir, { recursive: true });
-    const filePath = path.join(workspaceDir, name);
+    const { agentId, workspaceDir, memoryDir, name } = resolved;
+    await fs.mkdir(memoryDir, { recursive: true });
+    const filePath = path.join(memoryDir, name);
     const content = String(params.content ?? "");
     await fs.writeFile(filePath, content, "utf-8");
     const meta = await statFile(filePath);

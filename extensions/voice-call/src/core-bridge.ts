@@ -10,6 +10,11 @@ export type CoreConfig = {
   messages?: {
     tts?: VoiceCallTtsConfig;
   };
+  agents?: {
+    defaults?: {
+      memoryDir?: string;
+    };
+  };
   [key: string]: unknown;
 };
 
@@ -47,7 +52,7 @@ type CoreAgentDeps = {
     meta?: { aborted?: boolean };
   }>;
   resolveAgentTimeoutMs: (opts: { cfg: CoreConfig }) => number;
-  ensureAgentWorkspace: (params?: { dir: string }) => Promise<void>;
+  ensureAgentWorkspace: (params?: { dir: string; memoryDir?: string }) => Promise<void>;
   resolveStorePath: (store?: string, opts?: { agentId?: string }) => string;
   loadSessionStore: (storePath: string) => Record<string, unknown>;
   saveSessionStore: (storePath: string, store: Record<string, unknown>) => Promise<void>;

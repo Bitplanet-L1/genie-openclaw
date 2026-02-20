@@ -284,10 +284,13 @@ async function ensureGitRepo(dir: string, isBrandNewWorkspace: boolean) {
   }
 }
 
-function resolveMemoryWorkspaceDir(workspaceDir: string, memorySubdir?: string): string {
-  const subdir = memorySubdir?.trim();
+export function resolveMemoryWorkspaceDir(workspaceDir: string, memoryDir?: string): string {
+  const subdir = memoryDir?.trim();
   if (!subdir) {
     return workspaceDir;
+  }
+  if (path.isAbsolute(subdir)) {
+    return subdir;
   }
   return path.join(workspaceDir, subdir);
 }
@@ -295,7 +298,7 @@ function resolveMemoryWorkspaceDir(workspaceDir: string, memorySubdir?: string):
 export async function ensureAgentWorkspace(params?: {
   dir?: string;
   ensureBootstrapFiles?: boolean;
-  memorySubdir?: string;
+  memoryDir?: string;
 }): Promise<{
   dir: string;
   agentsPath?: string;
@@ -308,7 +311,7 @@ export async function ensureAgentWorkspace(params?: {
 }> {
   const rawDir = params?.dir?.trim() ? params.dir.trim() : DEFAULT_AGENT_WORKSPACE_DIR;
   const dir = resolveUserPath(rawDir);
-  const memoryDir = resolveMemoryWorkspaceDir(dir, params?.memorySubdir);
+  const memoryDir = resolveMemoryWorkspaceDir(dir, params?.memoryDir);
   await fs.mkdir(dir, { recursive: true });
   await fs.mkdir(memoryDir, { recursive: true });
 
@@ -451,11 +454,11 @@ async function resolveMemoryBootstrapEntries(
 
 export async function loadWorkspaceBootstrapFiles(
   dir: string,
-  memorySubdir?: string,
+  memoryDir?: string,
 ): Promise<WorkspaceBootstrapFile[]> {
   const resolvedDir = resolveUserPath(dir);
-  const memoryDir = resolveMemoryWorkspaceDir(resolvedDir, memorySubdir);
-  return loadWorkspaceBootstrapFilesFromDir(memoryDir);
+  const resolvedMemoryDir = resolveMemoryWorkspaceDir(resolvedDir, memoryDir);
+  return loadWorkspaceBootstrapFilesFromDir(resolvedMemoryDir);
 }
 
 async function loadWorkspaceBootstrapFilesFromDir(

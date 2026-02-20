@@ -135,7 +135,7 @@ export async function agentsAddCommand(
     await ensureWorkspaceAndSessions(workspaceDir, quietRuntime, {
       skipBootstrap: Boolean(bindingResult.config.agents?.defaults?.skipBootstrap),
       agentId,
-      memorySubdir: bindingResult.config.agents?.defaults?.memorySubdir,
+      memoryDir: bindingResult.config.agents?.defaults?.memoryDir,
     });
 
     const payload = {
@@ -346,7 +346,7 @@ export async function agentsAddCommand(
     await ensureWorkspaceAndSessions(workspaceDir, runtime, {
       skipBootstrap: Boolean(nextConfig.agents?.defaults?.skipBootstrap),
       agentId,
-      memorySubdir: nextConfig.agents?.defaults?.memorySubdir,
+      memoryDir: nextConfig.agents?.defaults?.memoryDir,
     });
 
     const payload = {
