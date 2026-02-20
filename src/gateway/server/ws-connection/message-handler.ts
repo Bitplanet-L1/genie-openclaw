@@ -30,6 +30,7 @@ import {
 } from "../../auth-rate-limit.js";
 import type { GatewayAuthResult, ResolvedGatewayAuth } from "../../auth.js";
 import { authorizeGatewayConnect, isLocalDirectRequest } from "../../auth.js";
+import { READ_SCOPE, WRITE_SCOPE } from "../../method-scopes.js";
 import {
   buildCanvasScopedHostUrl,
   CANVAS_CAPABILITY_TTL_MS,
@@ -342,6 +343,13 @@ export function attachGatewayWsMessageHandler(params: {
         const disableControlUiDeviceAuth =
           isControlUiOrWebchat && configSnapshot.gateway?.controlUi?.dangerouslyDisableDeviceAuth === true;
         const allowControlUiBypass = allowInsecureControlUi || disableControlUiDeviceAuth;
+        // Genie fork: grant default operator scopes to webchat/controlui clients when bypass is enabled
+        // and the client didn't declare any scopes (the upstream default-deny model strips self-declared
+        // scopes for deviceless clients, but never grants them — so webchat ends up with zero permissions).
+        if (allowControlUiBypass && scopes.length === 0 && (isControlUi || isWebchat)) {
+          scopes = [WRITE_SCOPE, READ_SCOPE];
+          connectParams.scopes = scopes;
+        }
         const device = disableControlUiDeviceAuth ? null : deviceRaw;
 
         const hasDeviceTokenCandidate = Boolean(connectParams.auth?.token && device);
