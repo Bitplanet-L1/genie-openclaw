@@ -44,6 +44,7 @@ async function ensureSandboxWorkspaceLayout(params: {
       sandboxWorkspaceDir,
       agentWorkspaceDir,
       params.config?.agents?.defaults?.skipBootstrap,
+      params.config?.agents?.defaults?.memoryDir,
     );
     if (cfg.workspaceAccess !== "rw") {
       try {

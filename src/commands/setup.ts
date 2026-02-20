@@ -25,12 +25,16 @@ async function readConfigFileRaw(configPath: string): Promise<{
 }
 
 export async function setupCommand(
-  opts?: { workspace?: string },
+  opts?: { workspace?: string; memoryDir?: string },
   runtime: RuntimeEnv = defaultRuntime,
 ) {
   const desiredWorkspace =
     typeof opts?.workspace === "string" && opts.workspace.trim()
       ? opts.workspace.trim()
+      : undefined;
+  const desiredMemoryDir =
+    typeof opts?.memoryDir === "string" && opts.memoryDir.trim()
+      ? opts.memoryDir.trim()
       : undefined;
 
   const io = createConfigIO();
@@ -40,6 +44,7 @@ export async function setupCommand(
   const defaults = cfg.agents?.defaults ?? {};
 
   const workspace = desiredWorkspace ?? defaults.workspace ?? DEFAULT_AGENT_WORKSPACE_DIR;
+  const memoryDir = desiredMemoryDir ?? defaults.memoryDir;
 
   const next: OpenClawConfig = {
     ...cfg,
@@ -48,16 +53,25 @@ export async function setupCommand(
       defaults: {
         ...defaults,
         workspace,
+        ...(memoryDir !== undefined ? { memoryDir } : {}),
       },
     },
   };
 
-  if (!existingRaw.exists || defaults.workspace !== workspace) {
+  const configChanged =
+    !existingRaw.exists || defaults.workspace !== workspace || defaults.memoryDir !== memoryDir;
+  if (configChanged) {
     await writeConfigFile(next);
     if (!existingRaw.exists) {
       runtime.log(`Wrote ${formatConfigPath(configPath)}`);
     } else {
-      logConfigUpdated(runtime, { path: configPath, suffix: "(set agents.defaults.workspace)" });
+      const fields = [
+        defaults.workspace !== workspace && "agents.defaults.workspace",
+        defaults.memoryDir !== memoryDir && "agents.defaults.memoryDir",
+      ]
+        .filter(Boolean)
+        .join(", ");
+      logConfigUpdated(runtime, { path: configPath, suffix: fields ? `(set ${fields})` : "" });
     }
   } else {
     runtime.log(`Config OK: ${formatConfigPath(configPath)}`);
@@ -66,7 +80,7 @@ export async function setupCommand(
   const ws = await ensureAgentWorkspace({
     dir: workspace,
     ensureBootstrapFiles: !next.agents?.defaults?.skipBootstrap,
-    memorySubdir: next.agents?.defaults?.memorySubdir,
+    memoryDir: next.agents?.defaults?.memoryDir,
   });
   runtime.log(`Workspace OK: ${shortenHomePath(ws.dir)}`);
 

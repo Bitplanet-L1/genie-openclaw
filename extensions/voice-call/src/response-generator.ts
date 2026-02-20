@@ -67,7 +67,10 @@ export async function generateVoiceResponse(
   const workspaceDir = deps.resolveAgentWorkspaceDir(cfg, agentId);
 
   // Ensure workspace exists
-  await deps.ensureAgentWorkspace({ dir: workspaceDir });
+  await deps.ensureAgentWorkspace({
+    dir: workspaceDir,
+    memoryDir: cfg.agents?.defaults?.memoryDir,
+  });
 
   // Load or create session entry
   const sessionStore = deps.loadSessionStore(storePath);

@@ -2,6 +2,16 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.02.20
+
+### Fixes
+
+- Agents/GenieBrain: complete `memoryDir` config threading across all gateway
+  file operations (`agents.files.list`, `agents.files.get`, `agents.files.set`,
+  `agents.create`, `agents.update`), sandbox workspace seeding, and the
+  voice-call extension so agent memory files reliably land in
+  `workspace/<memoryDir>/` when configured under `agents.defaults.memoryDir`.
+
 ## 2026.2.19 (Unreleased)
 
 ### Changes

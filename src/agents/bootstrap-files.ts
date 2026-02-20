@@ -33,7 +33,7 @@ export async function resolveBootstrapFilesForRun(params: {
   const bootstrapFiles = filterBootstrapFilesForSession(
     await loadWorkspaceBootstrapFiles(
       params.workspaceDir,
-      params.config?.agents?.defaults?.memorySubdir,
+      params.config?.agents?.defaults?.memoryDir,
     ),
     sessionKey,
   );

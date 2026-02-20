@@ -30,13 +30,13 @@ import {
 } from "../../auth-rate-limit.js";
 import type { GatewayAuthResult, ResolvedGatewayAuth } from "../../auth.js";
 import { authorizeGatewayConnect, isLocalDirectRequest } from "../../auth.js";
-import { READ_SCOPE, WRITE_SCOPE } from "../../method-scopes.js";
 import {
   buildCanvasScopedHostUrl,
   CANVAS_CAPABILITY_TTL_MS,
   mintCanvasCapabilityToken,
 } from "../../canvas-capability.js";
 import { buildDeviceAuthPayload } from "../../device-auth.js";
+import { READ_SCOPE, WRITE_SCOPE } from "../../method-scopes.js";
 import { isLoopbackAddress, isTrustedProxyAddress, resolveGatewayClientIp } from "../../net.js";
 import { resolveHostName } from "../../net.js";
 import { resolveNodeCommandAllowlist } from "../../node-command-policy.js";
@@ -341,7 +341,8 @@ export function attachGatewayWsMessageHandler(params: {
         const allowInsecureControlUi =
           isControlUiOrWebchat && configSnapshot.gateway?.controlUi?.allowInsecureAuth === true;
         const disableControlUiDeviceAuth =
-          isControlUiOrWebchat && configSnapshot.gateway?.controlUi?.dangerouslyDisableDeviceAuth === true;
+          isControlUiOrWebchat &&
+          configSnapshot.gateway?.controlUi?.dangerouslyDisableDeviceAuth === true;
         const allowControlUiBypass = allowInsecureControlUi || disableControlUiDeviceAuth;
         // Genie fork: grant default operator scopes to webchat/controlui clients when bypass is enabled
         // and the client didn't declare any scopes (the upstream default-deny model strips self-declared

@@ -50,10 +50,28 @@ describe("loadWorkspaceBootstrapFiles", () => {
     expect(memoryEntries).toHaveLength(0);
   });
 
-  it("reads bootstrap files from memorySubdir when provided", async () => {
+  it("reads bootstrap files from absolute memoryDir path", async () => {
     const tempDir = await makeTempWorkspace("openclaw-workspace-");
-    const memorySubdir = "GenieBrain";
-    const memoryDir = path.join(tempDir, memorySubdir);
+    const absoluteMemoryDir = await makeTempWorkspace("openclaw-memory-");
+    await writeWorkspaceFile({ dir: tempDir, name: DEFAULT_SOUL_FILENAME, content: "root-soul" });
+    await writeWorkspaceFile({
+      dir: absoluteMemoryDir,
+      name: DEFAULT_SOUL_FILENAME,
+      content: "absolute-soul",
+    });
+
+    const files = await loadWorkspaceBootstrapFiles(tempDir, absoluteMemoryDir);
+    const soulEntry = files.find((file) => file.name === DEFAULT_SOUL_FILENAME);
+
+    expect(soulEntry?.missing).toBe(false);
+    expect(soulEntry?.content).toBe("absolute-soul");
+    expect(soulEntry?.path).toBe(path.join(absoluteMemoryDir, DEFAULT_SOUL_FILENAME));
+  });
+
+  it("reads bootstrap files from memoryDir when provided", async () => {
+    const tempDir = await makeTempWorkspace("openclaw-workspace-");
+    const memoryDirName = "GenieBrain";
+    const memoryDir = path.join(tempDir, memoryDirName);
     await fs.mkdir(memoryDir, { recursive: true });
     await writeWorkspaceFile({ dir: tempDir, name: DEFAULT_SOUL_FILENAME, content: "root-soul" });
     await writeWorkspaceFile({
@@ -62,7 +80,7 @@ describe("loadWorkspaceBootstrapFiles", () => {
       content: "subdir-soul",
     });
 
-    const files = await loadWorkspaceBootstrapFiles(tempDir, memorySubdir);
+    const files = await loadWorkspaceBootstrapFiles(tempDir, memoryDirName);
     const soulEntry = files.find((file) => file.name === DEFAULT_SOUL_FILENAME);
 
     expect(soulEntry?.missing).toBe(false);
@@ -72,15 +90,15 @@ describe("loadWorkspaceBootstrapFiles", () => {
 });
 
 describe("ensureAgentWorkspace", () => {
-  it("creates memorySubdir and writes bootstrap templates there", async () => {
+  it("creates memoryDir and writes bootstrap templates there", async () => {
     const tempDir = await makeTempWorkspace("openclaw-workspace-");
-    const memorySubdir = "GenieBrain";
+    const memoryDirName = "GenieBrain";
     const ws = await ensureAgentWorkspace({
       dir: tempDir,
       ensureBootstrapFiles: true,
-      memorySubdir,
+      memoryDir: memoryDirName,
     });
-    const memoryDir = path.join(tempDir, memorySubdir);
+    const memoryDir = path.join(tempDir, memoryDirName);
 
     expect(ws.dir).toBe(tempDir);
     expect(ws.soulPath).toBe(path.join(memoryDir, DEFAULT_SOUL_FILENAME));

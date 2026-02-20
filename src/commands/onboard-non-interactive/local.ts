@@ -83,7 +83,7 @@ export async function runNonInteractiveOnboardingLocal(params: {
 
   await ensureWorkspaceAndSessions(workspaceDir, runtime, {
     skipBootstrap: Boolean(nextConfig.agents?.defaults?.skipBootstrap),
-    memorySubdir: nextConfig.agents?.defaults?.memorySubdir,
+    memoryDir: nextConfig.agents?.defaults?.memoryDir,
   });
 
   await installGatewayDaemonNonInteractive({

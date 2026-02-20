@@ -26,7 +26,8 @@ const mocks = vi.hoisted(() => ({
   fsMkdir: vi.fn(async () => undefined),
   fsAppendFile: vi.fn(async () => {}),
   fsReadFile: vi.fn(async () => ""),
-  fsStat: vi.fn(async () => null),
+  fsWriteFile: vi.fn(async () => {}),
+  fsStat: vi.fn<[string], unknown>(async () => null),
 }));
 
 vi.mock("../../config/config.js", () => ({
@@ -84,6 +85,7 @@ vi.mock("node:fs/promises", async () => {
     mkdir: mocks.fsMkdir,
     appendFile: mocks.fsAppendFile,
     readFile: mocks.fsReadFile,
+    writeFile: mocks.fsWriteFile,
     stat: mocks.fsStat,
   };
   return { ...patched, default: patched };
@@ -299,6 +301,40 @@ describe("agents.create", () => {
       "utf-8",
     );
   });
+
+  it("passes memoryDir to ensureAgentWorkspace when set in config", async () => {
+    mocks.applyAgentConfig.mockImplementation((_cfg: unknown, _opts: unknown) => ({
+      agents: { defaults: { memoryDir: "GenieBrain" } },
+    }));
+
+    const { promise } = makeCall("agents.create", {
+      name: "Brain Agent",
+      workspace: "/tmp/ws",
+    });
+    await promise;
+
+    expect(mocks.ensureAgentWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({ memoryDir: "GenieBrain" }),
+    );
+  });
+
+  it("writes IDENTITY.md under memoryDir when set", async () => {
+    mocks.applyAgentConfig.mockImplementation((_cfg: unknown, _opts: unknown) => ({
+      agents: { defaults: { memoryDir: "GenieBrain" } },
+    }));
+
+    const { promise } = makeCall("agents.create", {
+      name: "Brain Agent",
+      workspace: "/tmp/ws",
+    });
+    await promise;
+
+    expect(mocks.fsAppendFile).toHaveBeenCalledWith(
+      expect.stringContaining("GenieBrain"),
+      expect.any(String),
+      "utf-8",
+    );
+  });
 });
 
 describe("agents.update", () => {
@@ -349,6 +385,38 @@ describe("agents.update", () => {
     await promise;
 
     expect(mocks.ensureAgentWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("passes memoryDir to ensureAgentWorkspace when workspace changes", async () => {
+    mocks.applyAgentConfig.mockImplementation((_cfg: unknown, _opts: unknown) => ({
+      agents: { defaults: { memoryDir: "GenieBrain" } },
+    }));
+
+    const { promise } = makeCall("agents.update", {
+      agentId: "test-agent",
+      workspace: "/new/workspace",
+    });
+    await promise;
+
+    expect(mocks.ensureAgentWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({ memoryDir: "GenieBrain" }),
+    );
+  });
+
+  it("creates memoryDir when writing avatar without workspace change", async () => {
+    mocks.applyAgentConfig.mockImplementation((_cfg: unknown, _opts: unknown) => ({
+      agents: { defaults: { memoryDir: "GenieBrain" } },
+    }));
+
+    const { promise } = makeCall("agents.update", {
+      agentId: "main",
+      avatar: "https://example.com/avatar.png",
+    });
+    await promise;
+
+    expect(mocks.fsMkdir).toHaveBeenCalledWith(expect.stringContaining("GenieBrain"), {
+      recursive: true,
+    });
   });
 });
 
@@ -424,6 +492,70 @@ describe("agents.delete", () => {
       undefined,
       expect.objectContaining({ message: expect.stringContaining("invalid") }),
     );
+  });
+});
+
+describe("agents.files.list with memoryDir", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.loadConfigReturn = { agents: { defaults: { memoryDir: "GenieBrain" } } };
+    mocks.fsReadFile.mockImplementation(async () => {
+      throw createEnoentError();
+    });
+    mocks.fsStat.mockImplementation(async () => {
+      throw createEnoentError();
+    });
+  });
+
+  it("constructs file paths under memoryDir", async () => {
+    await listAgentFileNames();
+    // resolveAgentWorkspaceDir returns /workspace/test-agent
+    // with memoryDir=GenieBrain, paths should be under /workspace/test-agent/GenieBrain
+    const statCalls = (mocks.fsStat.mock.calls as unknown[][]).map((c) => String(c[0]));
+    expect(statCalls.every((p) => p.includes("GenieBrain"))).toBe(true);
+  });
+});
+
+describe("agents.files.get with memoryDir", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.loadConfigReturn = { agents: { defaults: { memoryDir: "GenieBrain" } } };
+    mocks.fsStat.mockImplementation(async () => {
+      throw createEnoentError();
+    });
+  });
+
+  it("resolves file path through memoryDir", async () => {
+    const { respond, promise } = makeCall("agents.files.get", {
+      agentId: "main",
+      name: "MEMORY.md",
+    });
+    await promise;
+
+    const [, result] = respond.mock.calls[0] ?? [];
+    const file = (result as { file: { path: string } }).file;
+    expect(file.path).toContain("GenieBrain");
+  });
+});
+
+describe("agents.files.set with memoryDir", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.loadConfigReturn = { agents: { defaults: { memoryDir: "GenieBrain" } } };
+    mocks.fsStat.mockImplementation(async () => ({ isFile: () => true, size: 5, mtimeMs: 0 }));
+  });
+
+  it("creates memoryDir and writes file under it", async () => {
+    const { promise } = makeCall("agents.files.set", {
+      agentId: "main",
+      name: "MEMORY.md",
+      content: "hello",
+    });
+    await promise;
+
+    expect(mocks.fsMkdir).toHaveBeenCalledWith(expect.stringContaining("GenieBrain"), {
+      recursive: true,
+    });
   });
 });
 
