@@ -354,6 +354,7 @@ export function attachGatewayWsMessageHandler(params: {
         const hasSharedAuth = hasTokenAuth || hasPasswordAuth;
         const controlUiAuthPolicy = resolveControlUiAuthPolicy({
           isControlUi,
+          isWebchat,
           controlUiConfig: configSnapshot.gateway?.controlUi,
           deviceRaw,
         });
