@@ -33,6 +33,7 @@ import {
   mintCanvasCapabilityToken,
 } from "../../canvas-capability.js";
 import { buildDeviceAuthPayload } from "../../device-auth.js";
+import { READ_SCOPE, WRITE_SCOPE } from "../../method-scopes.js";
 import {
   isLocalishHost,
   isLoopbackAddress,
@@ -358,6 +359,13 @@ export function attachGatewayWsMessageHandler(params: {
           controlUiConfig: configSnapshot.gateway?.controlUi,
           deviceRaw,
         });
+        // Genie fork: grant default operator scopes to webchat/controlui clients when bypass is enabled
+        // and the client didn't declare any scopes (the upstream default-deny model strips self-declared
+        // scopes for deviceless clients, but never grants them — so webchat ends up with zero permissions).
+        if (controlUiAuthPolicy.allowBypass && scopes.length === 0 && (isControlUi || isWebchat)) {
+          scopes = [WRITE_SCOPE, READ_SCOPE];
+          connectParams.scopes = scopes;
+        }
         const device = controlUiAuthPolicy.device;
 
         let {
