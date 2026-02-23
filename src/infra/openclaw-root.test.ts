@@ -148,6 +148,16 @@ describe("resolveOpenClawPackageRoot", () => {
     expect(resolveOpenClawPackageRootSync({ cwd: pkgRoot })).toBeNull();
   });
 
+  it("recognizes fork package roots", async () => {
+    const pkgRoot = fx("fork-openclaw");
+    setFile(
+      path.join(pkgRoot, "package.json"),
+      JSON.stringify({ name: "@bitplanet-l1/genie-openclaw" }),
+    );
+
+    expect(resolveOpenClawPackageRootSync({ cwd: pkgRoot })).toBe(pkgRoot);
+  });
+
   it("async resolver matches sync behavior", async () => {
     const pkgRoot = fx("async");
     setFile(path.join(pkgRoot, "package.json"), JSON.stringify({ name: "openclaw" }));

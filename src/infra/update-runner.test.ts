@@ -370,6 +370,11 @@ describe("runGatewayUpdate", () => {
       expectedInstallCommand: "npm i -g openclaw@beta --no-fund --no-audit --loglevel=error",
       tag: "beta",
     },
+    {
+      title: "normalizes scoped package tag overrides",
+      expectedInstallCommand: "npm i -g openclaw@beta",
+      tag: "@bitplanet-l1/genie-openclaw@beta",
+    },
   ])("$title", async ({ expectedInstallCommand, channel, tag }) => {
     const { calls, result } = await runNpmGlobalUpdateCase({
       expectedInstallCommand,
@@ -460,6 +465,29 @@ describe("runGatewayUpdate", () => {
     expect(result.status).toBe("error");
     expect(result.reason).toBe("not-openclaw-root");
     expect(calls.some((call) => call.includes("status --porcelain"))).toBe(false);
+  });
+
+  it("accepts git roots for fork package names", async () => {
+    await fs.mkdir(path.join(tempDir, ".git"));
+    await fs.writeFile(
+      path.join(tempDir, "package.json"),
+      JSON.stringify({ name: "@bitplanet-l1/genie-openclaw", version: "1.0.0" }),
+      "utf-8",
+    );
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(tempDir);
+    const { runner } = createRunner({
+      [`git -C ${tempDir} rev-parse --show-toplevel`]: { stdout: tempDir },
+      [`git -C ${tempDir} rev-parse HEAD`]: { stdout: "abc123" },
+      [`git -C ${tempDir} rev-parse --abbrev-ref HEAD`]: { stdout: "main" },
+      [`git -C ${tempDir} status --porcelain -- :!dist/control-ui/`]: { stdout: " M README.md" },
+    });
+
+    const result = await runWithRunner(runner);
+
+    cwdSpy.mockRestore();
+
+    expect(result.status).toBe("skipped");
+    expect(result.reason).toBe("dirty");
   });
 
   it("fails with a clear reason when openclaw.mjs is missing", async () => {
