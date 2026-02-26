@@ -745,7 +745,7 @@ describe("gateway server sessions", () => {
     ws.close();
   });
 
-  test("webchat clients cannot patch or delete sessions", async () => {
+  test("webchat clients can patch and delete sessions", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-sessions-webchat-"));
     const storePath = path.join(dir, "sessions.json");
     testState.sessionStorePath = storePath;
@@ -779,10 +779,9 @@ describe("gateway server sessions", () => {
 
     const patched = await rpcReq(ws, "sessions.patch", {
       key: "agent:main:discord:group:dev",
-      label: "should-fail",
+      label: "webchat-label",
     });
-    expect(patched.ok).toBe(false);
-    expect(patched.error?.message ?? "").toMatch(/webchat clients cannot patch sessions/i);
+    expect(patched.ok).toBe(true);
 
     const deleted = await rpcReq(ws, "sessions.delete", {
       key: "agent:main:discord:group:dev",
