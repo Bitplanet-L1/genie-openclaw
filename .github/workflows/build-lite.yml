@@ -41,9 +41,10 @@ jobs:
           echo "=== Collecting all packages from .pnpm store ==="
           mkdir -p _flat
 
-          # Walk the .pnpm store and extract every package into flat layout
-          # Each .pnpm/<hash>/node_modules/<scope>/<name> or <name> is a real package
-          find node_modules/.pnpm -mindepth 3 -maxdepth 4 -name "package.json" -not -path "*/node_modules/.pnpm/*" | while read pjson; do
+          # Walk the .pnpm store and extract every package into flat layout.
+          # Structure: .pnpm/<name@ver>/node_modules/<pkg>/package.json
+          # We want package.json files that are inside a node_modules/ dir.
+          find node_modules/.pnpm -path "*/node_modules/*/package.json" -not -path "*/node_modules/*/node_modules/*" | while read pjson; do
             pkg_dir=$(dirname "$pjson")
             # Determine the package name from package.json
             pkg_name=$(node -p "try{require('$pjson').name}catch{''}" 2>/dev/null)
@@ -92,8 +93,11 @@ jobs:
         run: |
           output=$(timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true)
           echo "$output"
-          if echo "$output" | grep -q "ERR_MODULE_NOT_FOUND"; then
-            echo "::error::Gateway failed with missing module"
+          # Must see "Missing config" (successful startup) — any other output is a failure
+          if echo "$output" | grep -q "Missing config"; then
+            echo "✅ Gateway started successfully"
+          else
+            echo "::error::Gateway failed to start. Expected 'Missing config' but got other output."
             exit 1
           fi
 
