@@ -30,40 +30,36 @@ jobs:
       - name: Prune for Genie-Lite
         run: ./scripts/prune-genie.sh
 
-      - name: Smoke test
+      - name: Flatten pnpm symlinks
+        run: |
+          echo "=== Before flatten ==="
+          echo "Top-level symlinks: $(find node_modules -maxdepth 1 -type l | wc -l)"
+          echo "Scoped symlinks: $(find node_modules/@* -maxdepth 1 -type l 2>/dev/null | wc -l)"
+
+          # Verify carbon exists before flatten
+          ls -la node_modules/@buape/carbon/dist/src/index.js 2>/dev/null && echo "CARBON PRE-FLATTEN: OK" || echo "CARBON PRE-FLATTEN: MISSING"
+
+          # Use rsync to dereference all symlinks into a flat copy
+          rsync -a --copy-links --exclude='.pnpm/' --exclude='.modules.yaml' \
+            node_modules/ _flat_modules/
+
+          # Verify carbon in flat copy
+          ls -la _flat_modules/@buape/carbon/dist/src/index.js 2>/dev/null && echo "CARBON POST-FLATTEN: OK" || echo "CARBON POST-FLATTEN: MISSING"
+
+          # Swap
+          rm -rf node_modules
+          mv _flat_modules node_modules
+          echo "Flattened node_modules: $(du -sh node_modules | cut -f1)"
+          echo "Symlinks remaining: $(find node_modules -type l 2>/dev/null | wc -l)"
+
+      - name: Smoke test (flat)
         run: |
           output=$(timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true)
           echo "$output"
           if echo "$output" | grep -q "ERR_MODULE_NOT_FOUND"; then
-            echo "::error::Gateway failed with missing module"
+            echo "::error::Gateway failed with missing module after flatten"
             exit 1
           fi
-
-      - name: Flatten pnpm symlinks
-        run: |
-          # pnpm node_modules is all symlinks → .pnpm store.
-          # Dereference them into a flat layout for tarball portability.
-          mkdir -p _flat/node_modules
-          # Copy top-level packages (follow symlinks with cp -L)
-          for entry in node_modules/*/; do
-            name=$(basename "$entry")
-            [[ "$name" == ".pnpm" || "$name" == ".modules.yaml" ]] && continue
-            cp -rL "$entry" "_flat/node_modules/$name" 2>/dev/null || true
-          done
-          # Handle scoped packages (@scope/pkg)
-          for scope in node_modules/@*/; do
-            scope_name=$(basename "$scope")
-            mkdir -p "_flat/node_modules/$scope_name"
-            for pkg in "$scope"*/; do
-              pkg_name=$(basename "$pkg")
-              cp -rL "$pkg" "_flat/node_modules/$scope_name/$pkg_name" 2>/dev/null || true
-            done
-          done
-          # Swap
-          rm -rf node_modules
-          mv _flat/node_modules node_modules
-          rmdir _flat
-          echo "Flattened node_modules: $(du -sh node_modules | cut -f1)"
 
       - name: Package tarball
         run: |
@@ -73,6 +69,7 @@ jobs:
             --exclude='.github' \
             --exclude='src' \
             dist/ extensions/ node_modules/ package.json openclaw.mjs
+          echo "Tarball: $(ls -lh genie-lite-*.tar.gz | awk '{print $5}')"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
