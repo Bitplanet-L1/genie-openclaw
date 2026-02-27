@@ -17,22 +17,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: false
+          submodules: recursive
 
-      - name: Setup Node environment
-        uses: ./.github/actions/setup-node-env
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          install-bun: "false"
+          node-version: '22'
+
+      # Use npm (not pnpm) for a flat, symlink-free node_modules that survives tarball extraction.
+      # Generate package-lock.json from pnpm-lock.yaml first.
+      - name: Generate package-lock.json
+        run: npx @pnpm/exportable-manifest --lockfile-only || npx pnpm import 2>/dev/null || npm install --package-lock-only --ignore-scripts 2>/dev/null || true
+
+      - name: Install dependencies (npm, flat node_modules)
+        run: |
+          # If pnpm import didn't produce a lockfile, fall back to plain install
+          if [ -f package-lock.json ]; then
+            npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
+          else
+            npm install --omit=dev --ignore-scripts
+          fi
+          # Run postinstall scripts that are needed (sharp, sqlite-vec native builds)
+          npx --yes node-gyp-build 2>/dev/null || true
 
       - name: Build
-        run: pnpm build
+        run: |
+          # Need pnpm for the build step since tsdown/build scripts use it
+          corepack enable
+          corepack prepare pnpm@10.23.0 --activate
+          pnpm install --frozen-lockfile --ignore-scripts=false --config.engine-strict=false || true
+          pnpm build
+
+      - name: Reinstall with npm for clean flat node_modules
+        run: |
+          rm -rf node_modules
+          npm install --omit=dev --ignore-scripts || npm install --omit=dev
 
       - name: Prune for Genie-Lite
         run: ./scripts/prune-genie.sh
 
       - name: Smoke test
         run: |
-          timeout 15 node dist/cli.js gateway run --port 19999 --bind loopback 2>&1 || true
+          timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true
 
       - name: Package tarball
         run: |

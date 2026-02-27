@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 if [[ ! -d node_modules ]]; then
-  echo "node_modules not found. Run pnpm install before pruning."
+  echo "node_modules not found. Run npm install before pruning."
   exit 1
 fi
 
@@ -24,7 +24,6 @@ echo "dist:         ${before_dist:-missing}"
 echo "total:        ${before_total:-unknown}"
 
 # 1) Remove all extensions except telegram and shared.
-#    This is the biggest win — extensions have their own node_modules.
 shopt -s nullglob
 for dir in extensions/*/; do
   ext="$(basename "$dir")"
@@ -35,79 +34,83 @@ for dir in extensions/*/; do
 done
 shopt -u nullglob
 
-# 2) Remove TypeScript source not needed in runtime artifact.
-# Note: .github/ is excluded from tarball but NOT deleted here (CI needs it for cleanup).
+# 2) Remove TypeScript source not needed at runtime.
 rm -rf src/
 
-# 3) Remove top-level deps confirmed NOT imported by dist/ code.
-#    IMPORTANT: Many deps look unused but are eagerly imported by the bundled dist.
-#    Only remove packages verified absent from: grep -rh "from ['\"]@" dist/*.js
-REMOVE_DEPS=(
+# 3) Remove large packages from node_modules that Genie doesn't need.
+#    NOTE: Many channel deps (@buape/carbon, @slack/*, @whiskeysockets/baileys, etc.)
+#    ARE eagerly imported by the bundled dist/ code and CANNOT be removed without
+#    causing ERR_MODULE_NOT_FOUND. Only remove packages NOT imported by dist/.
+REMOVE_PACKAGES=(
+  # Verified NOT imported by dist/ code:
   "@homebridge/ciao"
   "@larksuiteoapi/node-sdk"
   "@lydell/node-pty"
-  "discord-api-types"
   "pdfjs-dist"
-  "signal-utils"
+
+  # Large transitive deps not needed by Genie:
+  "@node-llama-cpp"
+  "node-llama-cpp"
+  "@lancedb"
+  "lancedb"
+  "koffi"
+  "@napi-rs/canvas"
+  "@napi-rs/canvas-linux-x64-gnu"
+  "@napi-rs/canvas-linux-x64-musl"
+  "@napi-rs/canvas-linux-arm64-gnu"
+  "@napi-rs/canvas-linux-arm64-musl"
+  "@matrix-org"
+
+  # Dev tools that shouldn't be in production:
+  "oxlint"
+  "@oxlint-tsgolint"
+  "oxfmt"
+  "tsdown"
+  "@rolldown"
+  "vitest"
+  "@vitest"
+  "typescript"
+  "@typescript"
+  "@typescript/native-preview"
 )
 
-for dep in "${REMOVE_DEPS[@]}"; do
-  dep_path="node_modules/$dep"
-  if [[ -d "$dep_path" || -L "$dep_path" ]]; then
-    echo "Removing dep: $dep"
-    rm -rf "$dep_path"
+for pkg in "${REMOVE_PACKAGES[@]}"; do
+  pkg_path="node_modules/$pkg"
+  if [[ -d "$pkg_path" ]]; then
+    echo "Removing: $pkg"
+    rm -rf "$pkg_path"
   fi
 done
 
-# 4) Deep clean the pnpm store (.pnpm/) — this is where the biggest savings are.
-#    These are transitive deps from removed extensions, or dev tools that leaked in.
-REMOVE_PNPM_PATTERNS=(
-  # LLM inference (node-llama-cpp + CUDA/Vulkan) — ~664 MB total. Genie uses Deva proxy.
-  "@node-llama-cpp+*"
-  "node-llama-cpp@*"
-  # LanceDB vector store — ~267 MB. Genie uses sqlite-vec.
-  "@lancedb+*"
-  "lancedb@*"
-  # FFI library — ~77 MB. Transitive dep, not used directly.
-  "koffi@*"
-  # Canvas rendering — ~124 MB. Not used by Genie servers.
-  "@napi-rs+canvas-*"
-  # Matrix SDK — ~22 MB. Channel not used.
-  "@matrix-org+*"
-  # Dev tools that shouldn't be in prod
-  "oxlint@*"
-  "@oxlint-tsgolint+*"
-  "oxfmt@*"
-  "tsdown@*"
-  "@rolldown+*"
-  "vitest@*"
-  "@vitest+*"
-  # Unused channel pnpm deps (safe — verified not imported by dist)
-  "@homebridge+ciao@*"
-  "@lydell+node-pty@*"
-  "@larksuiteoapi+*"
-  "signal-utils@*"
-  "pdfjs-dist@*"
-  # Electron/desktop — not needed on server
-  "electron@*"
-  "electron-*"
-)
-
-pnpm_dir="node_modules/.pnpm"
-if [[ -d "$pnpm_dir" ]]; then
+# Also clean pnpm virtual store if present (when run on pnpm-installed node_modules)
+if [[ -d "node_modules/.pnpm" ]]; then
+  REMOVE_PNPM_PATTERNS=(
+    "@node-llama-cpp+*" "node-llama-cpp@*"
+    "@lancedb+*" "lancedb@*"
+    "koffi@*"
+    "@napi-rs+canvas-*"
+    "@matrix-org+*"
+    "oxlint@*" "@oxlint-tsgolint+*" "oxfmt@*"
+    "tsdown@*" "@rolldown+*"
+    "vitest@*" "@vitest+*"
+    "typescript@*" "@typescript+*"
+    "@homebridge+ciao@*"
+    "@lydell+node-pty@*"
+    "@larksuiteoapi+*"
+    "pdfjs-dist@*"
+  )
   for pattern in "${REMOVE_PNPM_PATTERNS[@]}"; do
-    for p in "$pnpm_dir"/$pattern; do
+    for p in node_modules/.pnpm/$pattern; do
       [[ -e "$p" ]] || continue
       echo "Removing .pnpm: $(basename "$p")"
       rm -rf "$p"
     done
   done
+  # Remove broken symlinks
+  find node_modules -maxdepth 3 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
 fi
 
-# 5) Remove broken symlinks left by pnpm store cleanup.
-find node_modules -maxdepth 3 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
-
-# 6) Clean non-runtime files from node_modules.
+# 4) Clean non-runtime files from node_modules.
 find node_modules -type d \( -name "__tests__" -o -name "test" -o -name "tests" \) -prune -exec rm -rf {} + 2>/dev/null || true
 find node_modules -type f \( -name "*.test.*" -o -name "*.spec.*" \) -exec rm -f {} + 2>/dev/null || true
 find node_modules -type f -name "*.map" -exec rm -f {} + 2>/dev/null || true
