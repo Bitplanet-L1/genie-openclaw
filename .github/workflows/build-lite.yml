@@ -27,28 +27,28 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Reinstall with hoisted node_modules
-        run: |
-          # Remove pnpm's symlinked node_modules
-          rm -rf node_modules
-          # Reinstall with hoisted layout (flat, no symlinks — survives tarball)
-          # --prod strips devDependencies
-          pnpm install --node-linker=hoisted --prod --ignore-scripts=false --config.engine-strict=false --no-frozen-lockfile
-
       - name: Prune for Genie-Lite
         run: ./scripts/prune-genie.sh
 
       - name: Smoke test
         run: |
-          timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true
+          output=$(timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true)
+          echo "$output"
+          if echo "$output" | grep -q "ERR_MODULE_NOT_FOUND"; then
+            echo "::error::Gateway failed with missing module"
+            exit 1
+          fi
 
       - name: Package tarball
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          tar -czf "genie-lite-v${VERSION}.tar.gz" \
+          # --dereference follows pnpm symlinks so extracted node_modules is flat
+          tar -czh -f "genie-lite-v${VERSION}.tar.gz" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='src' \
+            --exclude='node_modules/.pnpm' \
+            --exclude='node_modules/.modules.yaml' \
             dist/ extensions/ node_modules/ package.json openclaw.mjs
 
       - name: Create Release
