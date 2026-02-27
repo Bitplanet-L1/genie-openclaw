@@ -31,73 +31,16 @@ jobs:
         run: ./scripts/prune-genie.sh
 
       - name: Flatten pnpm to portable node_modules
-        run: |
-          # pnpm structure: top-level symlinks → .pnpm/<name>@<ver>/node_modules/<name>
-          # We need a flat layout that works after tar extraction (no symlinks).
-          #
-          # Strategy: for each top-level entry (symlink), resolve and copy real files.
-          # For transitive deps: extract from .pnpm store into top-level.
-
-          echo "=== Collecting all packages from .pnpm store ==="
-          mkdir -p _flat
-
-          # Walk the .pnpm store and extract every package into flat layout.
-          # Structure: .pnpm/<name@ver>/node_modules/<pkg>/package.json
-          # We want package.json files that are inside a node_modules/ dir.
-          find node_modules/.pnpm -path "*/node_modules/*/package.json" -not -path "*/node_modules/*/node_modules/*" | while read pjson; do
-            pkg_dir=$(dirname "$pjson")
-            # Determine the package name from package.json
-            pkg_name=$(node -p "try{require('$pjson').name}catch{''}" 2>/dev/null)
-            [[ -z "$pkg_name" ]] && continue
-
-            # Target path in flat layout
-            target="_flat/$pkg_name"
-            # Only copy if not already there (first wins = matches pnpm resolution)
-            if [[ ! -d "$target" ]]; then
-              mkdir -p "$(dirname "$target")"
-              cp -a "$pkg_dir" "$target"
-            fi
-          done
-
-          # Copy any top-level non-symlink packages (pnpm sometimes has real dirs)
-          for entry in node_modules/*/; do
-            name=$(basename "$entry")
-            [[ "$name" == ".pnpm" || "$name" == ".modules.yaml" || "$name" == ".package-lock.json" ]] && continue
-            if [[ ! -L "${entry%/}" && ! -d "_flat/$name" ]]; then
-              cp -a "$entry" "_flat/$name"
-            fi
-          done
-          for scope in node_modules/@*/; do
-            scope_name=$(basename "$scope")
-            [[ "$scope_name" == "@*" ]] && continue
-            for entry in "$scope"*/; do
-              [[ -e "$entry" ]] || continue
-              name=$(basename "$entry")
-              if [[ ! -L "${entry%/}" && ! -d "_flat/$scope_name/$name" ]]; then
-                mkdir -p "_flat/$scope_name"
-                cp -a "$entry" "_flat/$scope_name/$name"
-              fi
-            done
-          done
-
-          # Swap
-          rm -rf node_modules
-          mv _flat node_modules
-
-          echo "=== After flatten ==="
-          echo "node_modules: $(du -sh node_modules | cut -f1)"
-          echo "Packages: $(find node_modules -maxdepth 2 -name package.json | wc -l)"
-          echo "Symlinks: $(find node_modules -type l 2>/dev/null | wc -l)"
+        run: node scripts/flatten-pnpm.mjs
 
       - name: Smoke test (flat)
         run: |
           output=$(timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true)
           echo "$output"
-          # Must see "Missing config" (successful startup) — any other output is a failure
           if echo "$output" | grep -q "Missing config"; then
             echo "✅ Gateway started successfully"
           else
-            echo "::error::Gateway failed to start. Expected 'Missing config' but got other output."
+            echo "::error::Gateway failed to start"
             exit 1
           fi
 
