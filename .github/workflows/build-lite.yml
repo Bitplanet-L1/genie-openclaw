@@ -50,6 +50,7 @@ jobs:
           ls node_modules/@buape/carbon/dist/src/index.js && echo "✅ carbon dist verified" || echo "❌ carbon dist still missing"
 
       - name: Smoke test
+        shell: bash {0}
         run: |
           # First test: import the subagent-registry chunk (which imports @buape/carbon)
           node --input-type=module -e "
@@ -65,15 +66,19 @@ jobs:
               console.log('⚠️ no subagent-registry chunk found');
             }
           "
+          if [ $? -ne 0 ]; then
+            echo "::error::subagent-registry import failed"
+            exit 1
+          fi
 
-          # Second test: gateway startup
+          # Second test: gateway startup (will exit non-zero without config, that's OK)
           output=$(timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true)
           echo "$output"
           if echo "$output" | grep -q "ERR_MODULE_NOT_FOUND"; then
             echo "::error::Gateway failed with missing module"
             exit 1
           fi
-          echo "✅ No missing modules"
+          echo "✅ All smoke tests passed"
 
       - name: Package tarball
         run: |
