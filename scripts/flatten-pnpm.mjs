@@ -52,7 +52,49 @@ function copyPackage(srcDir, pkgName) {
 
 console.log("=== Flattening pnpm node_modules ===");
 
-// Walk .pnpm/<hash>/node_modules/ directories
+// Phase 1: Copy the top-level symlink targets first (these are the "correct" versions).
+// This ensures we get the right version when there are multiple in the store.
+console.log("Phase 1: Resolving top-level symlinks...");
+import { realpathSync } from "node:fs";
+for (const entry of readdirSync(nmDir)) {
+  if (entry === ".pnpm" || entry.startsWith(".")) {
+    continue;
+  }
+  const entryPath = join(nmDir, entry);
+  try {
+    const stat = lstatSync(entryPath);
+    if (entry.startsWith("@") && stat.isDirectory()) {
+      // Scoped package directory — check contents
+      for (const sub of readdirSync(entryPath)) {
+        const subPath = join(entryPath, sub);
+        const subStat = lstatSync(subPath);
+        if (subStat.isSymbolicLink()) {
+          const realPath = realpathSync(subPath);
+          const pkgName = `${entry}/${sub}`;
+          const targetDir = join(flatDir, pkgName);
+          if (!existsSync(targetDir)) {
+            mkdirSync(join(flatDir, entry), { recursive: true });
+            cpSync(realPath, targetDir, { recursive: true, dereference: true });
+            copied++;
+          }
+        }
+      }
+    } else if (stat.isSymbolicLink()) {
+      const realPath = realpathSync(entryPath);
+      const targetDir = join(flatDir, entry);
+      if (!existsSync(targetDir)) {
+        cpSync(realPath, targetDir, { recursive: true, dereference: true });
+        copied++;
+      }
+    }
+  } catch {
+    // Broken symlink or permission issue — skip
+  }
+}
+console.log(`Phase 1: ${copied} top-level packages resolved`);
+
+// Phase 2: Walk .pnpm store for transitive deps not at top level.
+console.log("Phase 2: Extracting transitive deps from .pnpm store...");
 for (const hashEntry of readdirSync(pnpmDir)) {
   const hashDir = join(pnpmDir, hashEntry);
   const innerNm = join(hashDir, "node_modules");
