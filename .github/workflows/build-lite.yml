@@ -1,0 +1,51 @@
+name: Build Genie-Lite
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-lite:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+
+      - name: Build
+        run: npm run build
+
+      - name: Prune for Genie-Lite
+        run: ./scripts/prune-genie.sh
+
+      - name: Smoke test
+        run: |
+          timeout 15 node dist/cli.js gateway run --port 19999 --bind loopback 2>&1 || true
+
+      - name: Package tarball
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          tar -czf "genie-lite-v${VERSION}.tar.gz" \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='src' \
+            dist/ extensions/ node_modules/ package.json
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: genie-lite-*.tar.gz
+          generate_release_notes: true
