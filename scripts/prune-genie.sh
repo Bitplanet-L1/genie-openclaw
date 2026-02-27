@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 if [[ ! -d node_modules ]]; then
-  echo "node_modules not found. Run npm ci --omit=dev before pruning."
+  echo "node_modules not found. Run pnpm install before pruning."
   exit 1
 fi
 
@@ -39,7 +39,7 @@ shopt -u nullglob
 # We do NOT delete .github/ here because GitHub Actions needs it for post-job cleanup.
 rm -rf src/
 
-# 3) Remove explicitly unused core dependencies (spec Section 2.3).
+# 3) Remove explicitly unused top-level dependencies (symlinks in pnpm).
 REMOVE_DEPS=(
   "@buape/carbon"
   "discord-api-types"
@@ -66,15 +66,65 @@ for dep in "${REMOVE_DEPS[@]}"; do
     echo "Removing dep: $dep"
     rm -rf "$dep_path"
   fi
-
-  dep_pnpm="${dep//\//+}"
-  for p in node_modules/.pnpm/"${dep_pnpm}"@*; do
-    [[ -e "$p" ]] || continue
-    rm -rf "$p"
-  done
 done
 
-# 4) Clean non-runtime files from node_modules.
+# 4) Deep clean the pnpm store (.pnpm/) — this is where the actual disk usage lives.
+#    Remove large packages Genie doesn't need. Patterns match pnpm's flattened naming.
+REMOVE_PNPM_PATTERNS=(
+  # LLM inference (node-llama-cpp + CUDA/Vulkan) — ~664 MB. Genie uses Deva proxy.
+  "@node-llama-cpp+*"
+  "node-llama-cpp@*"
+  # LanceDB vector store — ~267 MB. Genie uses sqlite-vec.
+  "@lancedb+*"
+  "lancedb@*"
+  # FFI library — ~77 MB. Not used by Genie.
+  "koffi@*"
+  # Canvas rendering — ~124 MB. Not used by Genie.
+  "@napi-rs+canvas-*"
+  # Matrix SDK — ~22 MB. Channel not used.
+  "@matrix-org+*"
+  # Dev tools that shouldn't be in prod but sneak in via pnpm
+  "oxlint@*"
+  "@oxlint-tsgolint+*"
+  "oxfmt@*"
+  "tsdown@*"
+  "@rolldown+*"
+  "vitest@*"
+  "@vitest+*"
+  # Unused channel deps in the pnpm store
+  "playwright-core@*"
+  "pdfjs-dist@*"
+  "@slack+*"
+  "@whiskeysockets+*"
+  "signal-utils@*"
+  "@line+bot-sdk@*"
+  "@larksuiteoapi+*"
+  "@aws-sdk+client-bedrock@*"
+  "@buape+carbon@*"
+  "discord-api-types@*"
+  "@homebridge+ciao@*"
+  "@lydell+node-pty@*"
+  "@mariozechner+*"
+  # Electron/desktop deps — not needed on server
+  "electron@*"
+  "electron-*"
+)
+
+pnpm_dir="node_modules/.pnpm"
+if [[ -d "$pnpm_dir" ]]; then
+  for pattern in "${REMOVE_PNPM_PATTERNS[@]}"; do
+    for p in "$pnpm_dir"/$pattern; do
+      [[ -e "$p" ]] || continue
+      echo "Removing .pnpm: $(basename "$p")"
+      rm -rf "$p"
+    done
+  done
+fi
+
+# 5) Remove broken symlinks left by pnpm store cleanup.
+find node_modules -maxdepth 3 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
+
+# 6) Clean non-runtime files from node_modules.
 find node_modules -type d \( -name "__tests__" -o -name "test" -o -name "tests" \) -prune -exec rm -rf {} + 2>/dev/null || true
 find node_modules -type f \( -name "*.test.*" -o -name "*.spec.*" \) -exec rm -f {} + 2>/dev/null || true
 find node_modules -type f -name "*.map" -exec rm -f {} + 2>/dev/null || true
