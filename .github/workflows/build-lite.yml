@@ -70,6 +70,7 @@ jobs:
             scope_name=$(basename "$scope")
             [[ "$scope_name" == "@*" ]] && continue
             for entry in "$scope"*/; do
+              [[ -e "$entry" ]] || continue
               name=$(basename "$entry")
               if [[ ! -L "${entry%/}" && ! -d "_flat/$scope_name/$name" ]]; then
                 mkdir -p "_flat/$scope_name"
