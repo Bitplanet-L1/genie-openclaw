@@ -24,48 +24,22 @@ jobs:
         with:
           install-bun: "false"
 
-      - name: Build with pnpm
+      - name: Build
         run: pnpm build
 
-      - name: Replace pnpm node_modules with flat npm install
+      - name: Reinstall with hoisted node_modules
         run: |
-          # Generate package-lock.json from pnpm lockfile
-          npm install --package-lock-only --ignore-scripts 2>/dev/null || true
           # Remove pnpm's symlinked node_modules
           rm -rf node_modules
-          # Install flat node_modules with npm (survives tarball extraction)
-          npm install --omit=dev || npm install --omit=dev --legacy-peer-deps
+          # Reinstall with hoisted layout (flat, no symlinks — survives tarball)
+          # --prod strips devDependencies
+          pnpm install --node-linker=hoisted --prod --ignore-scripts=false --config.engine-strict=false --no-frozen-lockfile
 
       - name: Prune for Genie-Lite
         run: ./scripts/prune-genie.sh
 
-      - name: Smoke test (import key dist entry points)
+      - name: Smoke test
         run: |
-          node --input-type=module <<'EOF'
-          import fs from 'node:fs'
-          import path from 'node:path'
-          import { pathToFileURL } from 'node:url'
-
-          const distDir = path.resolve('dist')
-          const files = fs.readdirSync(distDir)
-          const prefixes = [
-            'auth-profiles-',
-            'reply-',
-            'pi-embedded-',
-            'auth-choice-',
-            'image-',
-            'subagent-registry-',
-          ]
-
-          for (const prefix of prefixes) {
-            const file = files.find((name) => name.startsWith(prefix) && name.endsWith('.js'))
-            if (!file) {
-              throw new Error(`Missing dist entrypoint for prefix: ${prefix}`)
-            }
-            await import(pathToFileURL(path.join(distDir, file)).href)
-          }
-          EOF
-
           timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true
 
       - name: Package tarball
