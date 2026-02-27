@@ -15,6 +15,7 @@ export default defineConfig([
     env,
     fixedExtension: false,
     noExternal,
+    inlineOnly: false,
     platform: "node",
   },
   {
@@ -22,6 +23,7 @@ export default defineConfig([
     env,
     fixedExtension: false,
     noExternal,
+    inlineOnly: false,
     platform: "node",
   },
   {
@@ -30,6 +32,7 @@ export default defineConfig([
     env,
     fixedExtension: false,
     noExternal,
+    inlineOnly: false,
     platform: "node",
   },
   {
@@ -37,6 +40,7 @@ export default defineConfig([
     env,
     fixedExtension: false,
     noExternal,
+    inlineOnly: false,
     platform: "node",
   },
   {
@@ -45,6 +49,7 @@ export default defineConfig([
     env,
     fixedExtension: false,
     noExternal,
+    inlineOnly: false,
     platform: "node",
   },
   {
@@ -53,6 +58,7 @@ export default defineConfig([
     env,
     fixedExtension: false,
     noExternal,
+    inlineOnly: false,
     platform: "node",
   },
   {
@@ -60,6 +66,7 @@ export default defineConfig([
     env,
     fixedExtension: false,
     noExternal,
+    inlineOnly: false,
     platform: "node",
   },
   {
@@ -67,6 +74,7 @@ export default defineConfig([
     env,
     fixedExtension: false,
     noExternal,
+    inlineOnly: false,
     platform: "node",
   },
 ]);
