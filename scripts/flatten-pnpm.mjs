@@ -12,7 +12,17 @@
  * 3. Swaps node_modules/ with _flat/
  */
 
-import { readdirSync, existsSync, mkdirSync, rmSync, renameSync, lstatSync, cpSync } from "node:fs";
+import {
+  readdirSync,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  renameSync,
+  lstatSync,
+  cpSync,
+  realpathSync,
+  readFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 
 const root = resolve(".");
@@ -32,10 +42,12 @@ let skipped = 0;
 
 /**
  * Copy a package directory to the flat layout.
+ * Also copies version-specific nested deps that differ from top-level.
  * @param {string} srcDir - Source directory (real files)
  * @param {string} pkgName - Package name (e.g., "grammy" or "@buape/carbon")
+ * @param {string} [parentNmDir] - The .pnpm/<hash>/node_modules/ dir (for nested deps)
  */
-function copyPackage(srcDir, pkgName) {
+function copyPackage(srcDir, pkgName, parentNmDir) {
   const targetDir = join(flatDir, pkgName);
   if (existsSync(targetDir)) {
     skipped++;
@@ -45,8 +57,83 @@ function copyPackage(srcDir, pkgName) {
   try {
     cpSync(srcDir, targetDir, { recursive: true, dereference: true });
     copied++;
-  } catch (e) {
-    console.error(`Failed to copy ${pkgName}: ${e.message}`);
+  } catch (err) {
+    console.error(`Failed to copy ${pkgName}: ${err.message}`);
+    return;
+  }
+
+  // Check if this package has sibling deps in its .pnpm node_modules that
+  // differ from top-level (version conflicts). Install them as nested deps.
+  if (parentNmDir) {
+    try {
+      const siblings = readdirSync(parentNmDir);
+      for (const sibling of siblings) {
+        if (sibling === pkgName || sibling === pkgName.split("/")[1] || sibling.startsWith(".")) {
+          continue;
+        }
+        const siblingPath = join(parentNmDir, sibling);
+        const sibStat = lstatSync(siblingPath);
+
+        // Check if this sibling is a symlink to a DIFFERENT version than what we have at top-level
+        if (sibStat.isSymbolicLink()) {
+          const sibReal = realpathSync(siblingPath);
+          let sibName = sibling;
+
+          // Handle scoped packages
+          if (sibling.startsWith("@")) {
+            const scopeEntries = readdirSync(siblingPath);
+            for (const se of scopeEntries) {
+              const scopedName = `${sibling}/${se}`;
+              const scopedReal = realpathSync(join(siblingPath, se));
+              const topLevelPath = join(flatDir, scopedName);
+
+              if (existsSync(topLevelPath)) {
+                // Check if versions differ
+                try {
+                  const topVer = JSON.parse(
+                    readFileSync(join(topLevelPath, "package.json"), "utf8"),
+                  ).version;
+                  const sibVer = JSON.parse(
+                    readFileSync(join(scopedReal, "package.json"), "utf8"),
+                  ).version;
+                  if (topVer !== sibVer) {
+                    // Install as nested dep
+                    const nestedPath = join(targetDir, "node_modules", scopedName);
+                    mkdirSync(join(targetDir, "node_modules", sibling), { recursive: true });
+                    cpSync(scopedReal, nestedPath, { recursive: true, dereference: true });
+                  }
+                } catch {
+                  /* skip */
+                }
+              }
+            }
+            continue;
+          }
+
+          const topLevelPath = join(flatDir, sibName);
+          if (existsSync(topLevelPath)) {
+            try {
+              const topVer = JSON.parse(
+                readFileSync(join(topLevelPath, "package.json"), "utf8"),
+              ).version;
+              const sibVer = JSON.parse(
+                readFileSync(join(sibReal, "package.json"), "utf8"),
+              ).version;
+              if (topVer !== sibVer) {
+                // Install as nested dep inside the package
+                const nestedPath = join(targetDir, "node_modules", sibName);
+                mkdirSync(join(targetDir, "node_modules"), { recursive: true });
+                cpSync(sibReal, nestedPath, { recursive: true, dereference: true });
+              }
+            } catch {
+              /* skip */
+            }
+          }
+        }
+      }
+    } catch {
+      /* skip */
+    }
   }
 }
 
@@ -55,7 +142,6 @@ console.log("=== Flattening pnpm node_modules ===");
 // Phase 1: Copy the top-level symlink targets first (these are the "correct" versions).
 // This ensures we get the right version when there are multiple in the store.
 console.log("Phase 1: Resolving top-level symlinks...");
-import { realpathSync } from "node:fs";
 for (const entry of readdirSync(nmDir)) {
   if (entry === ".pnpm" || entry.startsWith(".")) {
     continue;
@@ -137,14 +223,14 @@ for (const hashEntry of readdirSync(pnpmDir)) {
         try {
           const s = lstatSync(scopePkgDir);
           if (s.isDirectory() || s.isSymbolicLink()) {
-            copyPackage(scopePkgDir, pkgName);
+            copyPackage(scopePkgDir, pkgName, innerNm);
           }
         } catch {
           continue;
         }
       }
     } else if (stat.isDirectory() || stat.isSymbolicLink()) {
-      copyPackage(entryPath, entry);
+      copyPackage(entryPath, entry, innerNm);
     }
   }
 }
