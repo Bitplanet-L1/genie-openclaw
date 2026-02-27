@@ -34,8 +34,10 @@ for dir in extensions/*/; do
 done
 shopt -u nullglob
 
-# 2) Remove TypeScript source and repo metadata not needed in runtime artifact.
-rm -rf src/ .git/ .github/
+# 2) Remove TypeScript source not needed in runtime artifact.
+# Note: .git/ and .github/ are excluded from the tarball via --exclude in the CI workflow.
+# We do NOT delete .github/ here because GitHub Actions needs it for post-job cleanup.
+rm -rf src/
 
 # 3) Remove explicitly unused core dependencies (spec Section 2.3).
 REMOVE_DEPS=(
