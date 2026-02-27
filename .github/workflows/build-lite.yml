@@ -39,16 +39,39 @@ jobs:
             exit 1
           fi
 
+      - name: Flatten pnpm symlinks
+        run: |
+          # pnpm node_modules is all symlinks → .pnpm store.
+          # Dereference them into a flat layout for tarball portability.
+          mkdir -p _flat/node_modules
+          # Copy top-level packages (follow symlinks with cp -L)
+          for entry in node_modules/*/; do
+            name=$(basename "$entry")
+            [[ "$name" == ".pnpm" || "$name" == ".modules.yaml" ]] && continue
+            cp -rL "$entry" "_flat/node_modules/$name" 2>/dev/null || true
+          done
+          # Handle scoped packages (@scope/pkg)
+          for scope in node_modules/@*/; do
+            scope_name=$(basename "$scope")
+            mkdir -p "_flat/node_modules/$scope_name"
+            for pkg in "$scope"*/; do
+              pkg_name=$(basename "$pkg")
+              cp -rL "$pkg" "_flat/node_modules/$scope_name/$pkg_name" 2>/dev/null || true
+            done
+          done
+          # Swap
+          rm -rf node_modules
+          mv _flat/node_modules node_modules
+          rmdir _flat
+          echo "Flattened node_modules: $(du -sh node_modules | cut -f1)"
+
       - name: Package tarball
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          # --dereference follows pnpm symlinks so extracted node_modules is flat
-          tar -czh -f "genie-lite-v${VERSION}.tar.gz" \
+          tar -czf "genie-lite-v${VERSION}.tar.gz" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='src' \
-            --exclude='node_modules/.pnpm' \
-            --exclude='node_modules/.modules.yaml' \
             dist/ extensions/ node_modules/ package.json openclaw.mjs
 
       - name: Create Release
