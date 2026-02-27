@@ -17,41 +17,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node environment (pnpm)
+        uses: ./.github/actions/setup-node-env
         with:
-          node-version: '22'
+          install-bun: "false"
 
-      # Use npm (not pnpm) for a flat, symlink-free node_modules that survives tarball extraction.
-      # Generate package-lock.json from pnpm-lock.yaml first.
-      - name: Generate package-lock.json
-        run: npx @pnpm/exportable-manifest --lockfile-only || npx pnpm import 2>/dev/null || npm install --package-lock-only --ignore-scripts 2>/dev/null || true
+      - name: Build with pnpm
+        run: pnpm build
 
-      - name: Install dependencies (npm, flat node_modules)
+      - name: Replace pnpm node_modules with flat npm install
         run: |
-          # If pnpm import didn't produce a lockfile, fall back to plain install
-          if [ -f package-lock.json ]; then
-            npm ci --omit=dev --ignore-scripts || npm install --omit=dev --ignore-scripts
-          else
-            npm install --omit=dev --ignore-scripts
-          fi
-          # Run postinstall scripts that are needed (sharp, sqlite-vec native builds)
-          npx --yes node-gyp-build 2>/dev/null || true
-
-      - name: Build
-        run: |
-          # Need pnpm for the build step since tsdown/build scripts use it
-          corepack enable
-          corepack prepare pnpm@10.23.0 --activate
-          pnpm install --frozen-lockfile --ignore-scripts=false --config.engine-strict=false || true
-          pnpm build
-
-      - name: Reinstall with npm for clean flat node_modules
-        run: |
+          # Generate package-lock.json from pnpm lockfile
+          npm install --package-lock-only --ignore-scripts 2>/dev/null || true
+          # Remove pnpm's symlinked node_modules
           rm -rf node_modules
-          npm install --omit=dev --ignore-scripts || npm install --omit=dev
+          # Install flat node_modules with npm (survives tarball extraction)
+          npm install --omit=dev || npm install --omit=dev --legacy-peer-deps
 
       - name: Prune for Genie-Lite
         run: ./scripts/prune-genie.sh
