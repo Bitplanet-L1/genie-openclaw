@@ -24,6 +24,7 @@ echo "dist:         ${before_dist:-missing}"
 echo "total:        ${before_total:-unknown}"
 
 # 1) Remove all extensions except telegram and shared.
+#    This is the biggest win — extensions have their own node_modules.
 shopt -s nullglob
 for dir in extensions/*/; do
   ext="$(basename "$dir")"
@@ -35,29 +36,19 @@ done
 shopt -u nullglob
 
 # 2) Remove TypeScript source not needed in runtime artifact.
-# Note: .git/ and .github/ are excluded from the tarball via --exclude in the CI workflow.
-# We do NOT delete .github/ here because GitHub Actions needs it for post-job cleanup.
+# Note: .github/ is excluded from tarball but NOT deleted here (CI needs it for cleanup).
 rm -rf src/
 
-# 3) Remove explicitly unused top-level dependencies (symlinks in pnpm).
+# 3) Remove top-level deps confirmed NOT imported by dist/ code.
+#    IMPORTANT: Many deps look unused but are eagerly imported by the bundled dist.
+#    Only remove packages verified absent from: grep -rh "from ['\"]@" dist/*.js
 REMOVE_DEPS=(
-  "@buape/carbon"
-  "discord-api-types"
-  "@slack/bolt"
-  "@slack/web-api"
-  "@whiskeysockets/baileys"
-  "signal-utils"
-  "@line/bot-sdk"
-  "@larksuiteoapi/node-sdk"
-  # "@aws-sdk/client-bedrock"  # Keep — imported eagerly at startup by auth-profiles
-  "playwright-core"
-  "pdfjs-dist"
-  "@lydell/node-pty"
   "@homebridge/ciao"
-  "@mariozechner/pi-agent-core"
-  "@mariozechner/pi-ai"
-  "@mariozechner/pi-coding-agent"
-  "@mariozechner/pi-tui"
+  "@larksuiteoapi/node-sdk"
+  "@lydell/node-pty"
+  "discord-api-types"
+  "pdfjs-dist"
+  "signal-utils"
 )
 
 for dep in "${REMOVE_DEPS[@]}"; do
@@ -68,22 +59,22 @@ for dep in "${REMOVE_DEPS[@]}"; do
   fi
 done
 
-# 4) Deep clean the pnpm store (.pnpm/) — this is where the actual disk usage lives.
-#    Remove large packages Genie doesn't need. Patterns match pnpm's flattened naming.
+# 4) Deep clean the pnpm store (.pnpm/) — this is where the biggest savings are.
+#    These are transitive deps from removed extensions, or dev tools that leaked in.
 REMOVE_PNPM_PATTERNS=(
-  # LLM inference (node-llama-cpp + CUDA/Vulkan) — ~664 MB. Genie uses Deva proxy.
+  # LLM inference (node-llama-cpp + CUDA/Vulkan) — ~664 MB total. Genie uses Deva proxy.
   "@node-llama-cpp+*"
   "node-llama-cpp@*"
   # LanceDB vector store — ~267 MB. Genie uses sqlite-vec.
   "@lancedb+*"
   "lancedb@*"
-  # FFI library — ~77 MB. Not used by Genie.
+  # FFI library — ~77 MB. Transitive dep, not used directly.
   "koffi@*"
-  # Canvas rendering — ~124 MB. Not used by Genie.
+  # Canvas rendering — ~124 MB. Not used by Genie servers.
   "@napi-rs+canvas-*"
   # Matrix SDK — ~22 MB. Channel not used.
   "@matrix-org+*"
-  # Dev tools that shouldn't be in prod but sneak in via pnpm
+  # Dev tools that shouldn't be in prod
   "oxlint@*"
   "@oxlint-tsgolint+*"
   "oxfmt@*"
@@ -91,21 +82,13 @@ REMOVE_PNPM_PATTERNS=(
   "@rolldown+*"
   "vitest@*"
   "@vitest+*"
-  # Unused channel deps in the pnpm store
-  "playwright-core@*"
-  "pdfjs-dist@*"
-  "@slack+*"
-  "@whiskeysockets+*"
-  "signal-utils@*"
-  "@line+bot-sdk@*"
-  "@larksuiteoapi+*"
-  # "@aws-sdk+client-bedrock@*"  # Keep — imported eagerly at startup
-  "@buape+carbon@*"
-  "discord-api-types@*"
+  # Unused channel pnpm deps (safe — verified not imported by dist)
   "@homebridge+ciao@*"
   "@lydell+node-pty@*"
-  "@mariozechner+*"
-  # Electron/desktop deps — not needed on server
+  "@larksuiteoapi+*"
+  "signal-utils@*"
+  "pdfjs-dist@*"
+  # Electron/desktop — not needed on server
   "electron@*"
   "electron-*"
 )
