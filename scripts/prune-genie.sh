@@ -116,6 +116,49 @@ find node_modules -type f \( -name "*.test.*" -o -name "*.spec.*" \) -exec rm -f
 find node_modules -type f -name "*.map" -exec rm -f {} + 2>/dev/null || true
 find node_modules -type f -name "*.ts" ! -name "*.d.ts" -exec rm -f {} + 2>/dev/null || true
 
+# 5) Verify all external packages imported by dist/*.js still exist.
+if [[ ! -d dist ]]; then
+  echo "dist not found. Run build before pruning."
+  exit 1
+fi
+
+echo ""
+echo "=== Verifying dist imports against node_modules ==="
+
+missing_pkgs=()
+while IFS= read -r pkg; do
+  [[ -n "$pkg" ]] || continue
+  if [[ ! -e "node_modules/$pkg" && ! -e "node_modules/$pkg/package.json" ]]; then
+    missing_pkgs+=("$pkg")
+  fi
+done < <(
+  # Extract import specifiers from dist bundles and normalize to package roots.
+  # Examples:
+  # - "@scope/pkg/subpath" -> "@scope/pkg"
+  # - "pkg/subpath" -> "pkg"
+  rg --no-filename --only-matching \
+    --glob '*.js' \
+    -e 'from\s+["'"'"'][^"'"'"']+["'"'"']' \
+    -e 'import\s*\(\s*["'"'"'][^"'"'"']+["'"'"']\s*\)' \
+    -e 'require\s*\(\s*["'"'"'][^"'"'"']+["'"'"']\s*\)' \
+    dist \
+    | sed -E 's/^.*["'"'"']([^"'"'"']+)["'"'"'].*$/\1/' \
+    | awk '
+      $0 ~ /^(\.|\/|node:|https?:|data:)/ { next }
+      $0 ~ /^@[^/]+\/[^/]+/ { split($0, a, "/"); print a[1] "/" a[2]; next }
+      { split($0, a, "/"); print a[1] }
+    ' \
+    | sort -u
+)
+
+if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
+  echo "Missing packages required by dist imports:"
+  printf '  - %s\n' "${missing_pkgs[@]}"
+  exit 1
+fi
+
+echo "All dist-imported external packages are present in node_modules."
+
 echo ""
 echo "=== Post-prune sizes ==="
 after_nm="$(du -sh node_modules 2>/dev/null | cut -f1 || true)"

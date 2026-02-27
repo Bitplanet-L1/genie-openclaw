@@ -39,8 +39,33 @@ jobs:
       - name: Prune for Genie-Lite
         run: ./scripts/prune-genie.sh
 
-      - name: Smoke test
+      - name: Smoke test (import key dist entry points)
         run: |
+          node --input-type=module <<'EOF'
+          import fs from 'node:fs'
+          import path from 'node:path'
+          import { pathToFileURL } from 'node:url'
+
+          const distDir = path.resolve('dist')
+          const files = fs.readdirSync(distDir)
+          const prefixes = [
+            'auth-profiles-',
+            'reply-',
+            'pi-embedded-',
+            'auth-choice-',
+            'image-',
+            'subagent-registry-',
+          ]
+
+          for (const prefix of prefixes) {
+            const file = files.find((name) => name.startsWith(prefix) && name.endsWith('.js'))
+            if (!file) {
+              throw new Error(`Missing dist entrypoint for prefix: ${prefix}`)
+            }
+            await import(pathToFileURL(path.join(distDir, file)).href)
+          }
+          EOF
+
           timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true
 
       - name: Package tarball
