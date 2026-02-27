@@ -39,18 +39,41 @@ jobs:
           npm install --omit=dev --legacy-peer-deps
           echo "node_modules: $(du -sh node_modules | cut -f1), $(ls node_modules | wc -l) top-level packages"
 
+          # Verify carbon dist exists (known issue: sometimes missing after npm install)
+          if [ ! -f "node_modules/@buape/carbon/dist/src/index.js" ]; then
+            echo "⚠️ carbon dist/src/index.js missing — reinstalling carbon directly"
+            cd node_modules/@buape/carbon && npm pack @buape/carbon@0.14.0 --pack-destination /tmp 2>/dev/null && \
+              tar xzf /tmp/buape-carbon-0.14.0.tgz --strip-components=1 2>/dev/null && \
+              rm -f /tmp/buape-carbon-0.14.0.tgz
+            cd "$GITHUB_WORKSPACE"
+          fi
+          ls node_modules/@buape/carbon/dist/src/index.js && echo "✅ carbon dist verified" || echo "❌ carbon dist still missing"
+
       - name: Smoke test
         run: |
+          # First test: import the subagent-registry chunk (which imports @buape/carbon)
+          node --input-type=module -e "
+            import fs from 'node:fs';
+            import path from 'node:path';
+            import { pathToFileURL } from 'node:url';
+            const files = fs.readdirSync('dist');
+            const sr = files.find(f => f.startsWith('subagent-registry-') && f.endsWith('.js'));
+            if (sr) {
+              await import(pathToFileURL(path.join('dist', sr)).href);
+              console.log('✅ subagent-registry imported (carbon works)');
+            } else {
+              console.log('⚠️ no subagent-registry chunk found');
+            }
+          "
+
+          # Second test: gateway startup
           output=$(timeout 15 node openclaw.mjs gateway run --port 19999 --bind loopback 2>&1 || true)
           echo "$output"
-          if echo "$output" | grep -qE "Missing config|Listening on|gateway.*started"; then
-            echo "✅ Gateway started (or needs config, which is expected)"
-          elif echo "$output" | grep -q "ERR_MODULE_NOT_FOUND"; then
+          if echo "$output" | grep -q "ERR_MODULE_NOT_FOUND"; then
             echo "::error::Gateway failed with missing module"
             exit 1
-          else
-            echo "⚠️ Unexpected output, but no missing modules"
           fi
+          echo "✅ No missing modules"
 
       - name: Package tarball
         run: |
