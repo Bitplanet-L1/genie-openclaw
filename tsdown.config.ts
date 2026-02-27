@@ -4,13 +4,10 @@ const env = {
   NODE_ENV: "production",
 };
 
-const noExternal = [
-  /^@buape\/carbon(?:\/gateway)?$/,
-  /^@mariozechner\/pi-ai$/,
-  /^@mariozechner\/pi-coding-agent$/,
-  /^@mariozechner\/pi-tui$/,
-  /^@agentclientprotocol\/sdk$/,
-];
+// Bundle these packages inline — they ship TypeScript-only / broken dist
+// and don't work after flat npm install. Do NOT add packages with native
+// addons here (e.g. koffi, sharp) — they'll fail the build.
+const noExternal = [/^@buape\/carbon(\/.*)?$/];
 
 export default defineConfig([
   {
