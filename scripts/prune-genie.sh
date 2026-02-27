@@ -53,7 +53,7 @@ REMOVE_PACKAGES=(
   "node-llama-cpp"
   "@lancedb"
   "lancedb"
-  "koffi"
+  # "koffi"  # needed by @mariozechner/pi-tui → pi-ai (dist/ imports)
   "@napi-rs/canvas"
   "@napi-rs/canvas-linux-x64-gnu"
   "@napi-rs/canvas-linux-x64-musl"
@@ -87,7 +87,7 @@ if [[ -d "node_modules/.pnpm" ]]; then
   REMOVE_PNPM_PATTERNS=(
     "@node-llama-cpp+*" "node-llama-cpp@*"
     "@lancedb+*" "lancedb@*"
-    "koffi@*"
+    # "koffi@*"  # needed by pi-tui
     "@napi-rs+canvas-*"
     "@matrix-org+*"
     "oxlint@*" "@oxlint-tsgolint+*" "oxfmt@*"
