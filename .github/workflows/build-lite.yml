@@ -39,15 +39,7 @@ jobs:
           npm install --omit=dev --legacy-peer-deps
           echo "node_modules: $(du -sh node_modules | cut -f1), $(ls node_modules | wc -l) top-level packages"
 
-          # Verify carbon dist exists (known issue: sometimes missing after npm install)
-          if [ ! -f "node_modules/@buape/carbon/dist/src/index.js" ]; then
-            echo "⚠️ carbon dist/src/index.js missing — reinstalling carbon directly"
-            cd node_modules/@buape/carbon && npm pack @buape/carbon@0.14.0 --pack-destination /tmp 2>/dev/null && \
-              tar xzf /tmp/buape-carbon-0.14.0.tgz --strip-components=1 2>/dev/null && \
-              rm -f /tmp/buape-carbon-0.14.0.tgz
-            cd "$GITHUB_WORKSPACE"
-          fi
-          ls node_modules/@buape/carbon/dist/src/index.js && echo "✅ carbon dist verified" || echo "❌ carbon dist still missing"
+          ls node_modules/@buape/carbon/dist/src/index.js && echo "✅ carbon dist verified" || echo "⚠️ carbon dist missing"
 
       - name: Smoke test
         shell: bash {0}
@@ -83,10 +75,10 @@ jobs:
       - name: Package tarball
         run: |
           VERSION=$(node -p "require('./package.json').version")
+          # IMPORTANT: Do NOT use --exclude='src' — it matches src/ dirs INSIDE
+          # node_modules (e.g. @buape/carbon/dist/src/) and strips critical files.
+          # src/ is already removed by the prune step.
           tar -czf "genie-lite-v${VERSION}.tar.gz" \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='src' \
             dist/ extensions/ node_modules/ package.json openclaw.mjs
           echo "Tarball: $(ls -lh genie-lite-*.tar.gz | awk '{print $5}')"
 
