@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 if [[ ! -d node_modules ]]; then
-  echo "node_modules not found. Run npm install before pruning."
+  echo "node_modules not found. Run pnpm install before pruning."
   exit 1
 fi
 
@@ -37,60 +37,59 @@ shopt -u nullglob
 # 2) Remove TypeScript source not needed at runtime.
 rm -rf src/
 
-# 3) Remove large packages from node_modules that Genie doesn't need.
-#    NOTE: Many channel deps (@buape/carbon, @slack/*, @whiskeysockets/baileys, etc.)
-#    ARE eagerly imported by the bundled dist/ code and CANNOT be removed without
-#    causing ERR_MODULE_NOT_FOUND. Only remove packages NOT imported by dist/.
+# 3) Remove large packages that Genie doesn't need.
+#    These are NOT imported by dist/ code (verified via grep).
+#    IMPORTANT: Only remove from top-level AND .pnpm together to avoid broken symlinks.
 REMOVE_PACKAGES=(
-  # Verified NOT imported by dist/ code:
+  # Verified NOT in dist/ imports:
   "@homebridge/ciao"
   "@larksuiteoapi/node-sdk"
   "@lydell/node-pty"
   "pdfjs-dist"
+)
 
-  # Large transitive deps not needed by Genie:
+# Large transitive deps that are NOT direct imports of dist/ code.
+# These are only used by removed extensions or optional features.
+REMOVE_PNPM_ONLY=(
+  # LLM inference — ~664 MB. Genie uses Deva proxy.
   "@node-llama-cpp"
   "node-llama-cpp"
+  # LanceDB vector store — ~267 MB. Genie uses sqlite-vec.
   "@lancedb"
   "lancedb"
-  # "koffi"  # needed by @mariozechner/pi-tui → pi-ai (dist/ imports)
+  # Canvas rendering — ~124 MB.
   "@napi-rs/canvas"
   "@napi-rs/canvas-linux-x64-gnu"
   "@napi-rs/canvas-linux-x64-musl"
   "@napi-rs/canvas-linux-arm64-gnu"
   "@napi-rs/canvas-linux-arm64-musl"
+  # Matrix SDK — ~22 MB.
   "@matrix-org"
-
-  # Dev tools that shouldn't be in production:
+  # Dev tools
   "oxlint"
-  "@oxlint-tsgolint"
   "oxfmt"
   "tsdown"
-  "@rolldown"
   "vitest"
-  "@vitest"
   "typescript"
-  "@typescript"
-  "@typescript/native-preview"
 )
 
-for pkg in "${REMOVE_PACKAGES[@]}"; do
+# Remove from top-level node_modules
+for pkg in "${REMOVE_PACKAGES[@]}" "${REMOVE_PNPM_ONLY[@]}"; do
   pkg_path="node_modules/$pkg"
-  if [[ -d "$pkg_path" ]]; then
+  if [[ -d "$pkg_path" || -L "$pkg_path" ]]; then
     echo "Removing: $pkg"
     rm -rf "$pkg_path"
   fi
 done
 
-# Also clean pnpm virtual store if present (when run on pnpm-installed node_modules)
+# Clean .pnpm store for the removed packages (disk savings, won't be dereferenced)
 if [[ -d "node_modules/.pnpm" ]]; then
-  REMOVE_PNPM_PATTERNS=(
+  PNPM_PATTERNS=(
     "@node-llama-cpp+*" "node-llama-cpp@*"
     "@lancedb+*" "lancedb@*"
-    # "koffi@*"  # needed by pi-tui
     "@napi-rs+canvas-*"
     "@matrix-org+*"
-    "oxlint@*" "@oxlint-tsgolint+*" "oxfmt@*"
+    "oxlint@*" "oxfmt@*"
     "tsdown@*" "@rolldown+*"
     "vitest@*" "@vitest+*"
     "typescript@*" "@typescript+*"
@@ -99,65 +98,45 @@ if [[ -d "node_modules/.pnpm" ]]; then
     "@larksuiteoapi+*"
     "pdfjs-dist@*"
   )
-  for pattern in "${REMOVE_PNPM_PATTERNS[@]}"; do
+  for pattern in "${PNPM_PATTERNS[@]}"; do
     for p in node_modules/.pnpm/$pattern; do
       [[ -e "$p" ]] || continue
       echo "Removing .pnpm: $(basename "$p")"
       rm -rf "$p"
     done
   done
-  # Remove broken symlinks
-  find node_modules -maxdepth 3 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
 fi
 
-# 4) Clean non-runtime files from node_modules.
-find node_modules -type d \( -name "__tests__" -o -name "test" -o -name "tests" \) -prune -exec rm -rf {} + 2>/dev/null || true
-find node_modules -type f \( -name "*.test.*" -o -name "*.spec.*" \) -exec rm -f {} + 2>/dev/null || true
-find node_modules -type f -name "*.map" -exec rm -f {} + 2>/dev/null || true
-find node_modules -type f -name "*.ts" ! -name "*.d.ts" -exec rm -f {} + 2>/dev/null || true
+# 4) Clean non-runtime files from remaining packages.
+#    Note: follows symlinks to clean actual .pnpm store entries.
+find -L node_modules -type d \( -name "__tests__" -o -name "test" -o -name "tests" \) -prune -exec rm -rf {} + 2>/dev/null || true
+find -L node_modules -type f \( -name "*.test.*" -o -name "*.spec.*" \) -exec rm -f {} + 2>/dev/null || true
+find -L node_modules -type f -name "*.map" -exec rm -f {} + 2>/dev/null || true
+# Remove TypeScript source files but keep declaration files (.d.ts) and JavaScript (.js)
+find -L node_modules -type f -name "*.ts" ! -name "*.d.ts" -exec rm -f {} + 2>/dev/null || true
 
-# 5) Verify all external packages imported by dist/*.js still exist.
-if [[ ! -d dist ]]; then
-  echo "dist not found. Run build before pruning."
-  exit 1
-fi
+# 5) Remove broken symlinks (from .pnpm cleanup).
+find node_modules -maxdepth 3 -type l ! -exec test -e {} \; -delete 2>/dev/null || true
 
+# 6) Verify all external packages imported by dist/*.js still resolve.
 echo ""
-echo "=== Verifying dist imports against node_modules ==="
-
-missing_pkgs=()
-while IFS= read -r pkg; do
-  [[ -n "$pkg" ]] || continue
-  if [[ ! -e "node_modules/$pkg" && ! -e "node_modules/$pkg/package.json" ]]; then
-    missing_pkgs+=("$pkg")
+echo "=== Verifying dist imports ==="
+missing=0
+for pkg in $(grep -roh "from ['\"][^'\"]*['\"]" dist/*.js 2>/dev/null \
+    | sed "s/from ['\"]//;s/['\"]$//" \
+    | grep -v "^\.\|^node:\|^/\|^https:" \
+    | awk -F/ '$0 ~ /^@/ {print $1"/"$2; next} {print $1}' \
+    | sort -u); do
+  if [[ ! -e "node_modules/$pkg" && ! -L "node_modules/$pkg" ]]; then
+    echo "MISSING: $pkg"
+    missing=1
   fi
-done < <(
-  # Extract import specifiers from dist bundles and normalize to package roots.
-  # Examples:
-  # - "@scope/pkg/subpath" -> "@scope/pkg"
-  # - "pkg/subpath" -> "pkg"
-  rg --no-filename --only-matching \
-    --glob '*.js' \
-    -e 'from\s+["'"'"'][^"'"'"']+["'"'"']' \
-    -e 'import\s*\(\s*["'"'"'][^"'"'"']+["'"'"']\s*\)' \
-    -e 'require\s*\(\s*["'"'"'][^"'"'"']+["'"'"']\s*\)' \
-    dist \
-    | sed -E 's/^.*["'"'"']([^"'"'"']+)["'"'"'].*$/\1/' \
-    | awk '
-      $0 ~ /^(\.|\/|node:|https?:|data:)/ { next }
-      $0 ~ /^@[^/]+\/[^/]+/ { split($0, a, "/"); print a[1] "/" a[2]; next }
-      { split($0, a, "/"); print a[1] }
-    ' \
-    | sort -u
-)
-
-if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
-  echo "Missing packages required by dist imports:"
-  printf '  - %s\n' "${missing_pkgs[@]}"
+done
+if [[ $missing -eq 1 ]]; then
+  echo "ERROR: Some dist-imported packages are missing!"
   exit 1
 fi
-
-echo "All dist-imported external packages are present in node_modules."
+echo "All dist-imported packages present."
 
 echo ""
 echo "=== Post-prune sizes ==="
