@@ -49,7 +49,7 @@ REMOVE_DEPS=(
   "signal-utils"
   "@line/bot-sdk"
   "@larksuiteoapi/node-sdk"
-  "@aws-sdk/client-bedrock"
+  # "@aws-sdk/client-bedrock"  # Keep — imported eagerly at startup by auth-profiles
   "playwright-core"
   "pdfjs-dist"
   "@lydell/node-pty"
@@ -99,7 +99,7 @@ REMOVE_PNPM_PATTERNS=(
   "signal-utils@*"
   "@line+bot-sdk@*"
   "@larksuiteoapi+*"
-  "@aws-sdk+client-bedrock@*"
+  # "@aws-sdk+client-bedrock@*"  # Keep — imported eagerly at startup
   "@buape+carbon@*"
   "discord-api-types@*"
   "@homebridge+ciao@*"
