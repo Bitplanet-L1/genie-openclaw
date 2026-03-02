@@ -1,5 +1,5 @@
 {
-  "name": "openclaw",
+  "name": "@bitplanet-l1/genie-openclaw",
   "version": "2026.3.1",
   "description": "Multi-channel AI gateway with extensible messaging integrations",
   "keywords": [],
