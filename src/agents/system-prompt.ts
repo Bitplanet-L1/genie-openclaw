@@ -206,6 +206,8 @@ export function buildAgentSystemPrompt(params: {
   docsPath?: string;
   workspaceNotes?: string[];
   ttsHint?: string;
+  /** User-defined custom instructions from the web UI (injected as ## User Rules). */
+  customInstructions?: string;
   /** Controls which hardcoded sections to include. Defaults to "full". */
   promptMode?: PromptMode;
   /** Whether ACP-specific routing guidance should be included. Defaults to true. */
@@ -622,6 +624,11 @@ export function buildAgentSystemPrompt(params: {
     for (const file of validContextFiles) {
       lines.push(`## ${file.path}`, "", file.content, "");
     }
+  }
+
+  const customInstructions = params.customInstructions?.trim();
+  if (customInstructions) {
+    lines.push("## User Rules", "", "<user-rules>", customInstructions, "</user-rules>", "");
   }
 
   // Skip silent replies for subagent/none modes

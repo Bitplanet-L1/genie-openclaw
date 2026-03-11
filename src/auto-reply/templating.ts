@@ -155,6 +155,8 @@ export type MsgContext = {
    * Used for hook confirmation messages like "Session context saved to memory".
    */
   HookMessages?: string[];
+  /** User-defined custom instructions from web UI (injected into system prompt). */
+  CustomInstructions?: string;
 };
 
 export type FinalizedMsgContext = Omit<MsgContext, "CommandAuthorized"> & {

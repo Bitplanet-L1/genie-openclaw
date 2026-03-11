@@ -103,6 +103,7 @@ export type RunEmbeddedPiAgentParams = {
   lane?: string;
   enqueue?: typeof enqueueCommand;
   extraSystemPrompt?: string;
+  customInstructions?: string;
   inputProvenance?: InputProvenance;
   streamParams?: AgentStreamParams;
   ownerNumbers?: string[];

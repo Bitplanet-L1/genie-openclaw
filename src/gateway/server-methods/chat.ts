@@ -694,6 +694,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       }>;
       timeoutMs?: number;
       idempotencyKey: string;
+      customInstructions?: string;
     };
     const sanitizedMessageResult = sanitizeChatSendMessageInput(p.message);
     if (!sanitizedMessageResult.ok) {
@@ -828,6 +829,7 @@ export const chatHandlers: GatewayRequestHandlers = {
         SenderName: clientInfo?.displayName,
         SenderUsername: clientInfo?.displayName,
         GatewayClientScopes: client?.connect?.scopes,
+        CustomInstructions: p.customInstructions?.trim() || undefined,
       };
 
       const agentId = resolveSessionAgentId({
