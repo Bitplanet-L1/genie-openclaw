@@ -6,11 +6,16 @@ import {
   listChannelPlugins,
   normalizeChannelId,
 } from "../../channels/plugins/index.js";
+import { listPairingChannels, notifyPairingApproved } from "../../channels/plugins/pairing.js";
 import { buildChannelAccountSnapshot } from "../../channels/plugins/status.js";
 import type { ChannelAccountSnapshot, ChannelPlugin } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { loadConfig, readConfigFileSnapshot } from "../../config/config.js";
 import { getChannelActivity } from "../../infra/channel-activity.js";
+import {
+  listChannelPairingRequests,
+  approveChannelPairingCode,
+} from "../../pairing/pairing-store.js";
 import { DEFAULT_ACCOUNT_ID } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
 import {
@@ -18,6 +23,8 @@ import {
   errorShape,
   formatValidationErrors,
   validateChannelsLogoutParams,
+  validateChannelsPairingApproveParams,
+  validateChannelsPairingListParams,
   validateChannelsStatusParams,
 } from "../protocol/index.js";
 import { formatForLog } from "../ws-log.js";
@@ -288,5 +295,82 @@ export const channelsHandlers: GatewayRequestHandlers = {
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }
+  },
+  "channels.pairing.list": async ({ params, respond }) => {
+    const p = params;
+    if (!validateChannelsPairingListParams(p)) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `invalid channels.pairing.list params: ${formatValidationErrors(validateChannelsPairingListParams.errors)}`,
+        ),
+      );
+      return;
+    }
+
+    const pairingChannels = listPairingChannels();
+    const results: Record<string, unknown> = {};
+
+    for (const channelId of pairingChannels) {
+      if (p.channel && p.channel !== channelId) {
+        continue;
+      }
+      const requests = await listChannelPairingRequests(channelId);
+      results[channelId] = requests;
+    }
+
+    respond(true, { channels: results }, undefined);
+  },
+  "channels.pairing.approve": async ({ params, respond, context }) => {
+    const p = params;
+    if (!validateChannelsPairingApproveParams(p)) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `invalid channels.pairing.approve params: ${formatValidationErrors(validateChannelsPairingApproveParams.errors)}`,
+        ),
+      );
+      return;
+    }
+
+    const channelId = p.channel;
+    const code = p.code;
+    const notify = p.notify;
+
+    const result = await approveChannelPairingCode({
+      channel: channelId,
+      code,
+    });
+
+    if (!result) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown pairing code"));
+      return;
+    }
+
+    if (notify !== false && result.id) {
+      try {
+        const cfg = loadConfig();
+        await notifyPairingApproved({
+          channelId,
+          id: result.id,
+          cfg,
+          runtime: defaultRuntime,
+        });
+      } catch {
+        // Notification failure should not block the approval response
+      }
+    }
+
+    context.broadcast("channels.pairing.approved", {
+      channel: channelId,
+      code,
+      ts: Date.now(),
+    });
+
+    respond(true, result, undefined);
   },
 };

@@ -1,4 +1,4 @@
-import { Type } from "@sinclair/typebox";
+import { type Static, Type } from "@sinclair/typebox";
 import { NonEmptyString } from "./primitives.js";
 
 export const TalkModeParamsSchema = Type.Object(
@@ -146,6 +146,27 @@ export const ChannelsLogoutParamsSchema = Type.Object(
   },
   { additionalProperties: false },
 );
+
+// Channel pairing schemas
+export const ChannelsPairingListParamsSchema = Type.Object(
+  {
+    channel: Type.Optional(NonEmptyString),
+  },
+  { additionalProperties: false },
+);
+
+export type ChannelsPairingListParams = Static<typeof ChannelsPairingListParamsSchema>;
+
+export const ChannelsPairingApproveParamsSchema = Type.Object(
+  {
+    channel: NonEmptyString,
+    code: NonEmptyString,
+    notify: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
+export type ChannelsPairingApproveParams = Static<typeof ChannelsPairingApproveParamsSchema>;
 
 export const WebLoginStartParamsSchema = Type.Object(
   {
