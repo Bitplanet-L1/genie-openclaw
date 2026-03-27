@@ -23,14 +23,17 @@ describe("compareSemverStrings", () => {
 
 describe("resolveNpmChannelTag", () => {
   let versionByTag: Record<string, string | null>;
+  let capturedUrls: string[];
 
   beforeEach(() => {
     versionByTag = {};
+    capturedUrls = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url =
           typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        capturedUrls.push(url);
         const tag = decodeURIComponent(url.split("/").pop() ?? "");
         const version = versionByTag[tag] ?? null;
         return {
@@ -71,5 +74,25 @@ describe("resolveNpmChannelTag", () => {
     const resolved = await resolveNpmChannelTag({ channel: "beta", timeoutMs: 1000 });
 
     expect(resolved).toEqual({ tag: "latest", version: "1.0.1" });
+  });
+
+  it("uses custom package name when provided", async () => {
+    versionByTag.latest = "1.0.0";
+
+    await resolveNpmChannelTag({
+      channel: "stable",
+      timeoutMs: 1000,
+      packageName: "@mycorp/custom-pkg",
+    });
+
+    expect(capturedUrls[0]).toBe("https://registry.npmjs.org/%40mycorp%2Fcustom-pkg/latest");
+  });
+
+  it("defaults to openclaw package name", async () => {
+    versionByTag.latest = "1.0.0";
+
+    await resolveNpmChannelTag({ channel: "stable", timeoutMs: 1000 });
+
+    expect(capturedUrls[0]).toBe("https://registry.npmjs.org/openclaw/latest");
   });
 });
