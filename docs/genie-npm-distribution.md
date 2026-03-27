@@ -9,13 +9,13 @@ Genie OpenClaw is distributed through two channels:
 
 ## Why Two Channels?
 
-**npm** eliminates the need for GitHub Personal Access Tokens (PATs) during snapshot builds. Anyone can `npm install genie-openclaw` without authentication.
+**npm** eliminates the need for GitHub Personal Access Tokens (PATs) during snapshot builds. Anyone can `npm install @bitplanet/genie-openclaw` without authentication.
 
 **Tarball** (via `genie-upgrade.sh`) is deterministic and pre-built — no live dependency resolution during production upgrades. This is safer for fleet-wide rollouts orchestrated by content-server.
 
 ## For Snapshot Creation
 
-Snapshots use `npm i -g genie-openclaw@<version>` in `genie_setup.sh`. No PAT or `.npmrc` configuration needed.
+Snapshots use `npm i -g @bitplanet/genie-openclaw@<version>` in `genie_setup.sh`. No PAT or `.npmrc` configuration needed.
 
 ## For Server Upgrades
 
@@ -35,5 +35,5 @@ The built-in update checker reads the package name from `package.json` and queri
 
 ## Package Name
 
-- **npm:** `genie-openclaw` (unscoped, public)
+- **npm:** `@bitplanet/genie-openclaw` (scoped, public)
 - **Previous:** `@bitplanet-l1/genie-openclaw` (scoped, GitHub Packages, required PAT)
