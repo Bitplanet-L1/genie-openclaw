@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const CORE_PACKAGE_NAMES = new Set(["openclaw", "@bitplanet-l1/genie-openclaw"]);
+const CORE_PACKAGE_NAMES = new Set(["@bitplanet/genie-openclaw"]);
 
 async function readPackageName(dir: string): Promise<string | null> {
   try {
