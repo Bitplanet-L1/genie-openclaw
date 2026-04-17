@@ -14,19 +14,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 24 ships npm 11.x, which supports OIDC trusted publishing.
+      # Node 22 default (npm 10.x) signs provenance but can't complete the
+      # registry handshake with a trusted publisher and falls back to
+      # anonymous PUT (404).
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
       - uses: pnpm/action-setup@v4
 
       - run: pnpm install
 
       - run: pnpm build
-
-      # npm 11.5.1+ required for OIDC trusted publishing registry handshake.
-      # Node 22 ships npm 10.x, which signs provenance via OIDC but then
-      # falls back to anonymous registry PUT (404).
-      - run: npm install -g npm@latest
 
       - run: npm publish --provenance --access public
