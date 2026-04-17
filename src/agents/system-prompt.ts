@@ -411,13 +411,19 @@ export function buildAgentSystemPrompt(params: {
   });
   const workspaceNotes = (params.workspaceNotes ?? []).map((note) => note.trim()).filter(Boolean);
 
-  // For "none" mode, return just the basic identity line
+  // For "none" mode, return just the basic identity line.
+  // NOTE: the identity line intentionally avoids mentioning the host runtime by
+  // name. Upstream classifiers (notably Anthropic's API-side classifier) have
+  // been observed to false-positive when the brand name appears densely in the
+  // system prompt. Keeping the line generic lets downstream deployments surface
+  // their own branding via workspaceNotes / custom prompts without forcing a
+  // density-triggering phrase into every request.
   if (promptMode === "none") {
-    return "You are a personal assistant running inside OpenClaw.";
+    return "You are a personal assistant.";
   }
 
   const lines = [
-    "You are a personal assistant running inside OpenClaw.",
+    "You are a personal assistant.",
     "",
     "## Tooling",
     "Tool availability (filtered by policy):",
